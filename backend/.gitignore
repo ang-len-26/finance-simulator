@@ -1,0 +1,15 @@
+# 🐍 Python - Backend
+__pycache__/
+*.py[cod]
+*.sqlite3
+*.log
+.env
+venv/
+db.sqlite3
+
+# Django
+*.pot
+*.pyc
+*.pyo
+*.pyd
+*.migrations/
