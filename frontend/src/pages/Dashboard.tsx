@@ -2,6 +2,7 @@ import React from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import TransactionTable from "../components/common/TransactionTable";
+import TransactionSummary from "../components/dashboard/TransactionSummary";
 
 const Dashboard: React.FC = () => {
   const { username, logout } = useAuth();
@@ -27,6 +28,7 @@ const Dashboard: React.FC = () => {
       {/* Tabla de transacciones */}
       <div className="bg-white rounded shadow p-6">
         <h2 className="text-xl font-semibold mb-4">Transacciones recientes</h2>
+        <TransactionSummary />
         <TransactionTable />
       </div>
     </div>
