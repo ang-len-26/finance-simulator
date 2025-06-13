@@ -1,8 +1,13 @@
 import { FC, useMemo } from "react";
 import useFinanceData from "../../hooks/useFinanceData";
+import { Transaction } from "../../types/Transaction";
 
-const TransactionSummary: FC = () => {
-  const { transactions, filterType } = useFinanceData();
+interface Props {
+  transactions: Transaction[];
+}
+
+const TransactionSummary: FC<Props> = ({ transactions }) => {
+  const { filterType } = useFinanceData();
 
   const summary = useMemo(() => {
     const totals = {
@@ -15,7 +20,7 @@ const TransactionSummary: FC = () => {
     };
 
     transactions.forEach((t) => {
-      const amount = parseFloat(t.amount);
+      const amount = Number(t.amount);
       totals[t.type] += amount;
       totals.total += amount;
     });

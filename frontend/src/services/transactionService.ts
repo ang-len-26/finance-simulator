@@ -9,16 +9,18 @@ interface PaginatedResponse {
 }
 
 // Obtener todas las transacciones (con paginación opcional)
-export const fetchTransactions = async (page: number = 1): Promise<PaginatedResponse> => {
-  const response = await apiClient.get(`/transactions/?page=${page}`);
+export const fetchTransactions = async (url?: string) => {
+  const response = await apiClient.get(url || "/transactions/");
   return response.data;
 };
 
 // Crear una nueva transacción
-export const createTransaction = async (data: Transaction): Promise<Transaction> => {
+export const createTransaction = async (
+  data: Omit<Transaction, "id">
+): Promise<Transaction> => {
   const response = await apiClient.post("/transactions/", data);
   return response.data;
-};
+};;
 
 // Obtener una transacción por ID
 export const getTransactionById = async (id: number): Promise<Transaction> => {

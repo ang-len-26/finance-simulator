@@ -7,6 +7,11 @@ import {
 } from "react";
 import { fetchTransactions } from "../services/transactionService";
 import { Transaction } from "../types/Transaction";
+import {
+  aggregateByPeriod,
+  PeriodType,
+  AggregatedData,
+} from "../utils/finance";
 
 interface FinanceContextType {
   transactions: Transaction[];
@@ -18,6 +23,7 @@ interface FinanceContextType {
   refreshData: () => void;
   filterType: Transaction["type"] | "all";
   setFilterType: (type: Transaction["type"] | "all") => void;
+  getAggregatedData: (periodType: PeriodType) => AggregatedData[];
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -38,9 +44,13 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     return match ? parseInt(match[1], 10) : null;
   };
 
+  const getAggregatedData = (periodType: PeriodType) => {
+    return aggregateByPeriod(transactions, periodType);
+  };
+
   const loadData = async (url?: string) => {
     try {
-      const data = await fetchTransactions();
+      const data = await fetchTransactions(url);
       setTransactions(data.results);
       setNext(data.next);
       setPrevious(data.previous);
@@ -77,6 +87,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
         refreshData: () => loadData(),
         filterType,
         setFilterType,
+        getAggregatedData,
       }}
     >
       {children}
