@@ -23,17 +23,14 @@ Este proyecto es una aplicación fullstack para gestionar y visualizar tus finan
 
 ## 🚀 Estructura del Proyecto
 
-root/
-│
-├── backend/ # Proyecto Django
-│ └── api/ # App principal con modelo Transaction
-│
-├── frontend/ # Proyecto React
-│ └── src/ # Código fuente del frontend
-│
-├── venv/ # Entorno virtual (ignorado por Git)
-├── README.md
-├── .gitignore
+- Finance-Simulator/
+- │
+- ├── backend/ # Proyecto Django
+- │ └── api/ # App principal con modelo Transaction
+- ├── frontend/ # Proyecto React
+- │ └── src/ # Código fuente del frontend
+- ├── venv/ # Entorno virtual (ignorado por Git)
+- └── README.md
 
 ---
 
