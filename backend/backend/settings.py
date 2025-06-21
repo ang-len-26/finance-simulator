@@ -27,7 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -38,7 +38,7 @@ REST_FRAMEWORK = {
 		'rest_framework.filters.OrderingFilter',
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 5,  # Puedes ajustar el número de registros por página
+    'PAGE_SIZE': 5,
 }
 
 ALLOWED_HOSTS = ['finance-backend.onrender.com']
@@ -69,7 +69,6 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-#CORS_ALLOW_ALL_ORIGINS = True  # en desarrollo, permite todas las solicitudes de origen cruzado
 CORS_ALLOWED_ORIGINS = [
 	"https://finance-frontend.vercel.app",
     "http://localhost:3000",
@@ -93,7 +92,6 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'backend.wsgi.application'
-
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
