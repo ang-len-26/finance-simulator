@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: finance-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn backend.wsgi:application
+    envVars:
+      - key: DEBUG
+        value: false
+      - key: SECRET_KEY
+        value: your-secret-key
+      - key: DB_NAME
+        fromDatabase:
+          name: finance-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: finance-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: finance-db
+          property: password
+      - key: DB_HOST
+        fromDatabase:
+          name: finance-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: finance-db
+          property: port
+
+databases:
+  - name: finance-db
+    databaseName: finance
+    user: finance_user

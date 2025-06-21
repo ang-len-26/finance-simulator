@@ -41,10 +41,7 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 5,  # Puedes ajustar el número de registros por página
 }
 
-ALLOWED_HOSTS = [
-# 'tu_dominio.com', 'IP', 'localhost'  quitar el comentario cuando se pase a produccion
-]
-
+ALLOWED_HOSTS = ['finance-backend.onrender.com']
 
 # Application definition
 
@@ -74,6 +71,7 @@ MIDDLEWARE = [
 
 #CORS_ALLOW_ALL_ORIGINS = True  # en desarrollo, permite todas las solicitudes de origen cruzado
 CORS_ALLOWED_ORIGINS = [
+	"https://finance-frontend.vercel.app",
     "http://localhost:3000",
 ]
 
@@ -146,8 +144,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
-# quitar comentario en produccion
-# STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 
 # Default primary key field type
