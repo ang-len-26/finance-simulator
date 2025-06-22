@@ -10,10 +10,15 @@ from django.core.management import call_command
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 
+from rest_framework.permissions import AllowAny
+from rest_framework.decorators import api_view, permission_classes
+
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def run_migrations(request):
+    from django.core.management import call_command
     call_command('migrate')
-    return Response({"status": "migraciones aplicadas correctamente"})
+    return Response({"status": "Migraciones ejecutadas correctamente"})
 
 
 class TransactionViewSet(viewsets.ModelViewSet):
