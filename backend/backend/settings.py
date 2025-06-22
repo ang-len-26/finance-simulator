@@ -41,7 +41,7 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 5,
 }
 
-ALLOWED_HOSTS = ['finance-backend.onrender.com']
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost").split(",")
 
 # Application definition
 
