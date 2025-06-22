@@ -4,6 +4,7 @@ from .models import Transaction
 from .serializers import TransactionSerializer
 from django_filters.rest_framework import DjangoFilterBackend
 from .filters import TransactionFilter
+from rest_framework.permissions import AllowAny
 
 # api/views.py
 from django.core.management import call_command
@@ -11,6 +12,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view
 
 @api_view(['POST'])
+@permission_classes([AllowAny])  # type: ignore # 👈 Esto hace la vista accesible sin login
 def run_migrations(request):
     call_command('migrate')
     return Response({"status": "migraciones aplicadas correctamente"})
