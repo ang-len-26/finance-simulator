@@ -5,6 +5,17 @@ from .serializers import TransactionSerializer
 from django_filters.rest_framework import DjangoFilterBackend
 from .filters import TransactionFilter
 
+# api/views.py
+from django.core.management import call_command
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
+
+@api_view(['POST'])
+def run_migrations(request):
+    call_command('migrate')
+    return Response({"status": "migraciones aplicadas correctamente"})
+
+
 class TransactionViewSet(viewsets.ModelViewSet):
     queryset = Transaction.objects.all() # Obtener todas las transacciones
     serializer_class = TransactionSerializer # Serializador para la transacción
