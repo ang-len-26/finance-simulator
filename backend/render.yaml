@@ -11,26 +11,26 @@ services:
         value: your-secret-key
       - key: DB_NAME
         fromDatabase:
-          name: finance-db
+          name: finance_db
           property: database
       - key: DB_USER
         fromDatabase:
-          name: finance-db
+          name: finance_db
           property: user
       - key: DB_PASSWORD
         fromDatabase:
-          name: finance-db
+          name: finance_db
           property: password
       - key: DB_HOST
         fromDatabase:
-          name: finance-db
+          name: finance_db
           property: host
       - key: DB_PORT
         fromDatabase:
-          name: finance-db
+          name: finance_db
           property: port
 
 databases:
-  - name: finance-db
-    databaseName: finance
-    user: finance_user
+  - name: finance_db
+    databaseName: api_transaction
+    user: angeladmin
