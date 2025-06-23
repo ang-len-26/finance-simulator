@@ -5,10 +5,6 @@ from .views import TransactionViewSet
 # api/urls.py
 from .views import run_migrations
 
-urlpatterns = [
-    path('run-migrations/', run_migrations),
-]
-
 router = DefaultRouter()
 router.register(r'transactions', TransactionViewSet, basename='transaction')
 

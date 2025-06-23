@@ -10,13 +10,8 @@ from django.core.management import call_command
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 
-from rest_framework.permissions import AllowAny
-from rest_framework.decorators import api_view, permission_classes
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
+@api_view(['GET', 'POST'])
 def run_migrations(request):
-    from django.core.management import call_command
     call_command('migrate')
     return Response({"status": "Migraciones ejecutadas correctamente"})
 
