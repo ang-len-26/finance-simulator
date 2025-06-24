@@ -10,6 +10,23 @@ from django.core.management import call_command
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from django.contrib.auth.models import User
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+
+@api_view(["POST"])
+def create_superuser(request):
+    if User.objects.filter(username="admin").exists():
+        return Response({"status": "error", "message": "User already exists"}, status=400)
+
+    User.objects.create_superuser(
+        username="admin",
+        email="admin@example.com",
+        password="admin123"
+    )
+    return Response({"status": "success", "message": "Superuser created"}, status=201)
+
 @api_view(["POST"])
 def run_migrations(request):
     try:
@@ -17,7 +34,6 @@ def run_migrations(request):
         return Response({"status": "success", "message": "Migrations applied"})
     except Exception as e:
         return Response({"status": "error", "message": str(e)})
-
 
 class TransactionViewSet(viewsets.ModelViewSet):
     queryset = Transaction.objects.all() # Obtener todas las transacciones
