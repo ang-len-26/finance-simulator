@@ -27,8 +27,6 @@ services:
         fromDatabase:
           name: simulator_db
           property: port
-      - key: ALLOWED_HOSTS
-        value: finance-backend.onrender.com
 
 databases:
   - name: simulator_db
