@@ -9,28 +9,28 @@ services:
         value: false
       - key: DB_NAME
         fromDatabase:
-          name: finance_db
+          name: simulator_db
           property: database
-      - key: ALLOWED_HOSTS
-        value: finance-backend-9v2i.onrender.com
       - key: DB_USER
         fromDatabase:
-          name: finance_db
+          name: simulator_db
           property: user
       - key: DB_PASSWORD
         fromDatabase:
-          name: finance_db
+          name: simulator_db
           property: password
       - key: DB_HOST
         fromDatabase:
-          name: finance_db
+          name: simulator_db
           property: host
       - key: DB_PORT
         fromDatabase:
-          name: finance_db
+          name: simulator_db
           property: port
+      - key: ALLOWED_HOSTS
+        value: finance-backend.onrender.com
 
 databases:
-  - name: finance_db
-    databaseName: api_transaction
-    user: angeladmin
+  - name: simulator_db
+    databaseName: simulator_ftte
+    user: simulator_user

@@ -41,8 +41,7 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 5,
 }
 
-ALLOWED_HOSTS = ['*']
-# ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost").split(",")
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost").split(",")
 
 # Application definition
 
