@@ -8,7 +8,7 @@ services:
       - key: DEBUG
         value: false
       - key: SECRET_KEY
-        value: your-secret-key
+        value: %t6tm2!^yxgg-&s+a2x^zq=@&(et1h+ek2ub8+vw9s494&*f&d
       - key: DB_NAME
         fromDatabase:
           name: finance_db
