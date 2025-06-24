@@ -7,13 +7,16 @@ from .filters import TransactionFilter
 
 # api/views.py
 from django.core.management import call_command
-from rest_framework.response import Response
 from rest_framework.decorators import api_view
+from rest_framework.response import Response
 
-@api_view(['GET', 'POST'])
+@api_view(["POST"])
 def run_migrations(request):
-    call_command('migrate')
-    return Response({"status": "Migraciones ejecutadas correctamente"})
+    try:
+        call_command('migrate')
+        return Response({"status": "success", "message": "Migrations applied"})
+    except Exception as e:
+        return Response({"status": "error", "message": str(e)})
 
 
 class TransactionViewSet(viewsets.ModelViewSet):
