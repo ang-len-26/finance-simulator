@@ -33,7 +33,9 @@ def create_superuser(request):
         print("✅ Superusuario creado exitosamente.")
         return Response({"status": "success", "message": "Superuser created"}, status=201)
     except Exception as e:
-        print(f"❌ Error al crear superusuario: {str(e)}")
+        import traceback
+        print("❌ Error al crear superusuario:")
+        traceback.print_exc()  # Esto imprime el error con traza completa
         return Response({"status": "error", "message": str(e)}, status=500)
 
 @api_view(["POST"])
