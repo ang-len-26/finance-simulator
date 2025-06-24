@@ -17,15 +17,24 @@ from rest_framework import status
 
 @api_view(["POST"])
 def create_superuser(request):
+    print("🔍 Entrando a create_superuser...")
+
     if User.objects.filter(username="admin").exists():
+        print("⚠️ Usuario 'admin' ya existe.")
         return Response({"status": "error", "message": "User already exists"}, status=400)
 
-    User.objects.create_superuser(
-        username="admin",
-        email="admin@example.com",
-        password="admin123"
-    )
-    return Response({"status": "success", "message": "Superuser created"}, status=201)
+    try:
+        print("🛠 Creando superusuario...")
+        User.objects.create_superuser(
+            username="admin",
+            email="admin@example.com",
+            password="admin123"
+        )
+        print("✅ Superusuario creado exitosamente.")
+        return Response({"status": "success", "message": "Superuser created"}, status=201)
+    except Exception as e:
+        print(f"❌ Error al crear superusuario: {str(e)}")
+        return Response({"status": "error", "message": str(e)}, status=500)
 
 @api_view(["POST"])
 def run_migrations(request):
