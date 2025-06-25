@@ -70,7 +70,7 @@ MIDDLEWARE = [
 ]
 
 CORS_ALLOWED_ORIGINS = [
-	"https://finance-frontend.vercel.app",
+	"https://finance-frontend-pink.vercel.app",
     "http://localhost:3000",
 ]
 
