@@ -5,166 +5,196 @@ from .views import (
     AccountViewSet,
     ReportsViewSet,
     CategoryViewSet,
+    FinancialGoalViewSet,
+    GoalContributionViewSet, 
+    GoalTemplateViewSet,
+    BudgetAlertViewSet,
+    # Funciones de utilidad
     run_migrations,
     create_superuser,
     register_user,
     create_demo_user,
     reports_overview,
     financial_ratios,
-	FinancialGoalViewSet,
-    GoalContributionViewSet, 
-    GoalTemplateViewSet,
     create_goal_templates,
     goals_calendar,
     goals_insights,
 )
 
-# AGREGAR en router.register():
+# =====================================================
+# CONFIGURACIÓN DEL ROUTER
+# =====================================================
 router = DefaultRouter()
+
+# ViewSets principales - CRUD automático
 router.register(r'transactions', TransactionViewSet, basename='transaction')
 router.register(r'accounts', AccountViewSet, basename='account')
-router.register(r'reports', ReportsViewSet, basename='reports')
 router.register(r'categories', CategoryViewSet, basename='category')
+
+# ViewSets de reportes
+router.register(r'reports', ReportsViewSet, basename='reports')
+
+# ViewSets de metas financieras
 router.register(r'goals', FinancialGoalViewSet, basename='goal')
 router.register(r'goal-contributions', GoalContributionViewSet, basename='goal-contribution')
 router.register(r'goal-templates', GoalTemplateViewSet, basename='goal-template')
 
+# ViewSets de alertas
+router.register(r'budget-alerts', BudgetAlertViewSet, basename='budget-alerts')
 
+
+# =====================================================
+# URLS PATTERNS - ENDPOINTS PERSONALIZADOS
+# =====================================================
 urlpatterns = [
-    # Endpoints del router (CRUD automático)
+    # 🔥 IMPORTANTE: Router debe ir PRIMERO para evitar conflictos
     path('', include(router.urls)),
     
-    # Endpoints de autenticación
-    path('register/', register_user, name='register'),
-    path('demo/', create_demo_user, name='demo'),
+    # ============= AUTENTICACIÓN =============
+    path('auth/register/', register_user, name='register'),
+    path('auth/demo/', create_demo_user, name='demo'),
     
-    # NUEVOS ENDPOINTS DE REPORTES
+    # ============= REPORTES ESPECIALES =============
     path('reports-overview/', reports_overview, name='reports-overview'),
     path('financial-ratios/', financial_ratios, name='financial-ratios'),
     
-    # Endpoints de utilidades
-    path('run-migrations/', run_migrations),
-    path('create-superuser/', create_superuser),
-
-	# Endpoints de metas financieras
-	path('create-goal-templates/', create_goal_templates, name='create-goal-templates'),
+    # ============= METAS FINANCIERAS - ENDPOINTS ESPECIALES =============
+    path('setup/create-goal-templates/', create_goal_templates, name='create-goal-templates'),
     path('goals-calendar/', goals_calendar, name='goals-calendar'),
     path('goals-insights/', goals_insights, name='goals-insights'),
+    
+    # ============= UTILIDADES DE SETUP =============
+    path('setup/run-migrations/', run_migrations, name='run-migrations'),
+    path('setup/create-superuser/', create_superuser, name='create-superuser'),
 ]
 
 # =====================================================
-# ENDPOINTS DISPONIBLES COMPLETOS:
+# 📋 DOCUMENTACIÓN DE ENDPOINTS DISPONIBLES
 # =====================================================
 
-# ============= CUENTAS =============
-# GET    /api/accounts/                    -> Listar cuentas
-# POST   /api/accounts/                    -> Crear cuenta
-# GET    /api/accounts/{id}/               -> Obtener cuenta específica
-# PUT    /api/accounts/{id}/               -> Actualizar cuenta
-# PATCH  /api/accounts/{id}/               -> Actualizar parcialmente
-# DELETE /api/accounts/{id}/               -> Eliminar cuenta
-# GET    /api/accounts/summary/            -> Resumen financiero de todas las cuentas
-# GET    /api/accounts/{id}/transactions/  -> Transacciones de una cuenta específica
-# GET    /api/accounts/{id}/balance_history/ -> Historial de balance (30 días)
-# POST   /api/accounts/{id}/reconcile/     -> Conciliar cuenta con balance real
+"""
+ENDPOINTS FINALES DESPUÉS DE OPTIMIZACIÓN:
 
-# ============= TRANSACCIONES =============
-# GET    /api/transactions/                -> Listar transacciones (con filtros)
-# POST   /api/transactions/                -> Crear transacción
-# GET    /api/transactions/{id}/           -> Obtener transacción específica
-# PUT    /api/transactions/{id}/           -> Actualizar transacción
-# PATCH  /api/transactions/{id}/           -> Actualizar parcialmente
-# DELETE /api/transactions/{id}/           -> Eliminar transacción
-# GET    /api/transactions/dashboard/      -> Dashboard con métricas clave
+============= 🏦 CUENTAS (AccountViewSet) =============
+GET    /api/accounts/                      -> Listar cuentas del usuario
+POST   /api/accounts/                      -> Crear nueva cuenta
+GET    /api/accounts/{id}/                 -> Obtener cuenta específica  
+PUT    /api/accounts/{id}/                 -> Actualizar cuenta completa
+PATCH  /api/accounts/{id}/                 -> Actualizar cuenta parcialmente
+DELETE /api/accounts/{id}/                 -> Eliminar cuenta
+GET    /api/accounts/summary/              -> Resumen financiero global
+GET    /api/accounts/{id}/transactions/    -> Transacciones de cuenta específica
+GET    /api/accounts/{id}/balance_history/ -> Historial balance (30 días)
+POST   /api/accounts/{id}/reconcile/       -> Conciliar balance real
 
-# ============= 🆕 REPORTES AVANZADOS =============
-# GET    /api/reports/metrics/             -> Métricas principales con comparativas
-# GET    /api/reports/income-vs-expenses/  -> Datos gráfico Ingresos vs Gastos
-# GET    /api/reports/balance-timeline/    -> Balance acumulado en el tiempo
-# GET    /api/reports/category-distribution/ -> Distribución gastos por categoría
-# GET    /api/reports/top-categories/      -> Top 5 categorías con comparativas
-# GET    /api/reports/recent-transactions/ -> Transacciones recientes con íconos
+============= 💸 TRANSACCIONES (TransactionViewSet) =============
+GET    /api/transactions/                  -> Listar con filtros avanzados
+POST   /api/transactions/                  -> Crear transacción
+GET    /api/transactions/{id}/             -> Obtener transacción específica
+PUT    /api/transactions/{id}/             -> Actualizar transacción
+PATCH  /api/transactions/{id}/             -> Actualizar parcialmente
+DELETE /api/transactions/{id}/             -> Eliminar transacción
+GET    /api/transactions/dashboard/        -> Dashboard con métricas
 
-# ============= 🆕 ENDPOINTS ESPECIALES =============
-# GET    /api/reports-overview/            -> Todos los datos de reportes en 1 llamada
-# GET    /api/financial-ratios/            -> Ratios financieros profesionales
+============= 🏷️ CATEGORÍAS (CategoryViewSet) =============
+GET    /api/categories/                    -> Listar categorías activas
+POST   /api/categories/                    -> Crear categoría personalizada
+GET    /api/categories/{id}/               -> Obtener categoría específica
+PUT    /api/categories/{id}/               -> Actualizar categoría
+DELETE /api/categories/{id}/               -> Eliminar categoría
+GET    /api/categories/summary/            -> Resumen gastos por categoría
 
-# ============= METAS FINANCIERAS =============
-# GET    /api/goals/                           -> Listar metas del usuario
-# POST   /api/goals/                           -> Crear nueva meta
-# GET    /api/goals/{id}/                      -> Obtener meta específica
-# PUT    /api/goals/{id}/                      -> Actualizar meta completa
-# PATCH  /api/goals/{id}/                      -> Actualizar meta parcialmente
-# DELETE /api/goals/{id}/                      -> Eliminar meta
-# GET    /api/goals/dashboard/                 -> Dashboard completo de metas
-# GET    /api/goals/summary/                   -> Resumen rápido para widgets
-# POST   /api/goals/{id}/add_contribution/     -> Agregar contribución a meta
-# GET    /api/goals/{id}/contributions/        -> Ver contribuciones de meta
-# POST   /api/goals/{id}/add_milestone/        -> Agregar hito a meta
-# POST   /api/goals/{id}/pause/                -> Pausar meta
-# POST   /api/goals/{id}/resume/               -> Reanudar meta pausada
-# POST   /api/goals/{id}/complete/             -> Marcar meta como completada
-# GET    /api/goals/{id}/analytics/            -> Análisis detallado de meta
+============= 📊 REPORTES (ReportsViewSet) =============
+GET    /api/reports/metrics/               -> Métricas principales + comparativas
+GET    /api/reports/income-vs-expenses/    -> Datos para gráfico ingresos vs gastos
+GET    /api/reports/balance-timeline/      -> Timeline balance acumulado
+GET    /api/reports/category-distribution/ -> Distribución por categorías (pie chart)
+GET    /api/reports/top-categories/        -> Top 5 categorías con tendencias
+GET    /api/reports/recent-transactions/   -> Transacciones recientes con íconos
 
-# ============= CONTRIBUCIONES =============
-# GET    /api/goal-contributions/              -> Listar contribuciones del usuario
-# POST   /api/goal-contributions/              -> Crear contribución manual
-# GET    /api/goal-contributions/{id}/         -> Obtener contribución específica
-# PUT    /api/goal-contributions/{id}/         -> Actualizar contribución
-# DELETE /api/goal-contributions/{id}/         -> Eliminar contribución
+============= 🎯 METAS FINANCIERAS (FinancialGoalViewSet) =============
+GET    /api/goals/                         -> Listar metas del usuario
+POST   /api/goals/                         -> Crear nueva meta
+GET    /api/goals/{id}/                    -> Obtener meta específica
+PUT    /api/goals/{id}/                    -> Actualizar meta
+PATCH  /api/goals/{id}/                    -> Actualizar parcialmente
+DELETE /api/goals/{id}/                    -> Eliminar meta
+GET    /api/goals/dashboard/               -> Dashboard completo metas
+GET    /api/goals/summary/                 -> Resumen para widgets
+POST   /api/goals/{id}/add_contribution/   -> Agregar contribución
+GET    /api/goals/{id}/contributions/      -> Ver contribuciones
+POST   /api/goals/{id}/add_milestone/      -> Agregar hito
+POST   /api/goals/{id}/pause/              -> Pausar meta
+POST   /api/goals/{id}/resume/             -> Reanudar meta
+POST   /api/goals/{id}/complete/           -> Completar meta
+GET    /api/goals/{id}/analytics/          -> Análisis detallado
 
-# ============= PLANTILLAS DE METAS =============
-# GET    /api/goal-templates/                  -> Listar plantillas disponibles
-# GET    /api/goal-templates/{id}/             -> Obtener plantilla específica
-# POST   /api/goal-templates/{id}/create_goal/ -> Crear meta desde plantilla
-# GET    /api/goal-templates/by_category/      -> Plantillas agrupadas por tipo
+============= 💰 CONTRIBUCIONES (GoalContributionViewSet) =============
+GET    /api/goal-contributions/            -> Listar contribuciones usuario
+POST   /api/goal-contributions/            -> Crear contribución manual
+GET    /api/goal-contributions/{id}/       -> Obtener contribución específica
+PUT    /api/goal-contributions/{id}/       -> Actualizar contribución
+DELETE /api/goal-contributions/{id}/       -> Eliminar contribución
 
-# ============= ENDPOINTS ESPECIALES =============
-# POST   /api/create-goal-templates/           -> Crear plantillas predeterminadas
-# GET    /api/goals-calendar/                  -> Vista calendario con fechas importantes
-# GET    /api/goals-insights/                  -> Insights inteligentes sobre metas
+============= 📋 PLANTILLAS METAS (GoalTemplateViewSet) =============
+GET    /api/goal-templates/                -> Listar plantillas disponibles
+GET    /api/goal-templates/{id}/           -> Obtener plantilla específica
+POST   /api/goal-templates/{id}/create_goal/ -> Crear meta desde plantilla
+GET    /api/goal-templates/by_category/    -> Plantillas por categoría
 
-# ============= 📊 PARÁMETROS PARA REPORTES =============
-# Todos los endpoints de reportes soportan:
-# ?period=monthly|quarterly|yearly|custom  -> Período de análisis
-# ?start_date=2024-01-01                   -> Fecha inicio (para custom)
-# ?end_date=2024-12-31                     -> Fecha fin (para custom)
-# ?limit=10                                -> Límite resultados (donde aplique)
+============= 🚨 ALERTAS (BudgetAlertViewSet) =============
+GET    /api/budget-alerts/                 -> Listar alertas del usuario
+POST   /api/budget-alerts/                 -> Crear alerta personalizada
+GET    /api/budget-alerts/{id}/            -> Obtener alerta específica
+PATCH  /api/budget-alerts/{id}/            -> Marcar como leída/despedida
+DELETE /api/budget-alerts/{id}/            -> Eliminar alerta
 
-# ============= FILTROS EXISTENTES =============
-# Transacciones:
-# ?min_amount=100&max_amount=1000          -> Rango de montos
-# ?type=expense                            -> Tipo de transacción
-# ?description=netflix                     -> Buscar en descripción
-# ?date_after=2024-01-01&date_before=2024-12-31  -> Rango de fechas
-# ?from_account=1                          -> Cuenta origen
-# ?to_account=2                            -> Cuenta destino
-# ?account=1                               -> Cualquier cuenta (origen o destino)
-# ?bank=BCP                                -> Filtrar por banco
-# ?account_type=checking                   -> Tipo de cuenta
-# ?location=Lima                           -> Ubicación
-# ?tags=comida,trabajo                     -> Etiquetas
-# ?is_recurring=true                       -> Solo recurrentes
-# ?cash_flow=positive                      -> Flujo de efectivo
-# ?category=1                              -> 🆕 Filtrar por categoría
+============= 🔐 AUTENTICACIÓN =============
+POST   /api/auth/register/                 -> Registro de usuario
+POST   /api/auth/demo/                     -> Crear usuario demo
 
-# Cuentas:
-# ?name=corriente                          -> Nombre de cuenta
-# ?bank_name=BCP                           -> Banco
-# ?account_type=checking                   -> Tipo de cuenta
-# ?min_balance=1000                        -> Balance mínimo
-# ?is_active=true                          -> Solo cuentas activas
+============= 📈 REPORTES ESPECIALES =============
+GET    /api/reports-overview/              -> Todos los reportes en 1 llamada
+GET    /api/financial-ratios/              -> Ratios financieros profesionales
 
-# Metas:
-# ?status=active                              -> Filtrar por estado
-# ?goal_type=savings                          -> Filtrar por tipo de meta
-# ?priority=high                              -> Filtrar por prioridad
+============= 🎯 METAS - ENDPOINTS ESPECIALES =============
+POST   /api/setup/create-goal-templates/   -> Crear plantillas predeterminadas
+GET    /api/goals-calendar/                -> Vista calendario fechas importantes
+GET    /api/goals-insights/                -> Insights inteligentes sobre metas
 
-# Contribuciones:
-# ?start_date=2024-01-01                      -> Desde fecha
-# ?end_date=2024-12-31                        -> Hasta fecha
-# ?goal=1                                     -> De meta específica
+============= 🛠️ UTILIDADES SETUP =============
+POST   /api/setup/run-migrations/          -> Ejecutar migraciones
+POST   /api/setup/create-superuser/        -> Crear superusuario
 
-# Calendario:
-# ?year=2024                                  -> Año específico
-# ?month=12                                   -> Mes específico
+============= 🔍 FILTROS DISPONIBLES =============
+
+Transacciones (/api/transactions/):
+- ?min_amount=100&max_amount=1000          -> Rango montos
+- ?type=expense,income                     -> Tipos específicos
+- ?description=netflix                     -> Buscar en descripción/título
+- ?date_after=2024-01-01&date_before=2024-12-31 -> Rango fechas
+- ?from_account=1                          -> Cuenta origen
+- ?to_account=2                            -> Cuenta destino  
+- ?account=1                               -> Cualquier cuenta
+- ?bank=BCP                                -> Filtrar por banco
+- ?account_type=checking                   -> Tipo de cuenta
+- ?location=Lima                           -> Ubicación
+- ?tags=comida,trabajo                     -> Etiquetas (JSON)
+- ?is_recurring=true                       -> Solo recurrentes
+- ?cash_flow=positive,negative             -> Flujo efectivo
+- ?category=1                              -> Categoría específica
+
+Cuentas (/api/accounts/):
+
+Metas (/api/goals/):
+- ?status=active,completed                 -> Estado meta
+- ?goal_type=savings,emergency_fund        -> Tipo meta
+- ?priority=high,medium,low                -> Prioridad
+
+Reportes (todos):
+- ?period=monthly,quarterly,yearly,custom  -> Período análisis
+- ?start_date=2024-01-01                   -> Fecha inicio (custom)
+- ?end_date=2024-12-31                     -> Fecha fin (custom)
+- ?limit=10                                -> Límite resultados
+
+"""

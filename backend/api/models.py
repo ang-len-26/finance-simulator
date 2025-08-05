@@ -1,10 +1,9 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator
-from django.db.models import Avg, Sum
+from django.db.models import Sum
 from decimal import Decimal
 from django.utils import timezone
-from datetime import timedelta
 
 # =====================================================
 # NUEVO MODELO: Sistema de Cuentas/Bancos
@@ -60,7 +59,6 @@ class Account(models.Model):
     
     def update_balance(self):
         """Recalcular balance basado en transacciones"""
-        from django.db.models import Sum, Q
         
         # Ingresos a esta cuenta
         income = Transaction.objects.filter(
@@ -721,172 +719,3 @@ class GoalTemplate(models.Model):
         
         return self.suggested_amount or Decimal('1000.00')
 
-# =====================================================
-# FUNCIÓN PARA CREAR PLANTILLAS PREDETERMINADAS
-# =====================================================
-
-def create_default_goal_templates():
-    """Crear plantillas predeterminadas de metas financieras"""
-    
-    templates = [
-        {
-            'name': 'Fondo de Emergencia',
-            'description': 'Ahorra para cubrir 6 meses de gastos en caso de emergencia',
-            'goal_type': 'emergency_fund',
-            'suggested_timeframe_months': 12,
-            'icon': 'shield-check',
-            'color': '#ef4444',
-            'tips': [
-                'Ahorra automáticamente cada mes',
-                'Mantén el dinero en cuenta separada',
-                'No uses este fondo para gastos no esenciales',
-                'Revisa y ajusta el monto anualmente'
-            ]
-        },
-        {
-            'name': 'Vacaciones Soñadas',
-            'description': 'Ahorra para ese viaje que siempre has querido hacer',
-            'goal_type': 'vacation',
-            'suggested_amount': Decimal('3000.00'),
-            'suggested_timeframe_months': 8,
-            'icon': 'plane',
-            'color': '#22c55e',
-            'tips': [
-                'Investiga y calcula todos los costos',
-                'Busca ofertas y promociones',
-                'Considera viajar en temporada baja',
-                'Ahorra dinero extra para imprevistos'
-            ]
-        },
-        {
-            'name': 'Auto Nuevo',
-            'description': 'Ahorra para la cuota inicial de tu próximo vehículo',
-            'goal_type': 'purchase',
-            'suggested_amount': Decimal('15000.00'),
-            'suggested_timeframe_months': 18,
-            'icon': 'car',
-            'color': '#3b82f6',
-            'tips': [
-                'Investiga modelos y precios',
-                'Considera autos usados en buen estado',
-                'Negocia el mejor precio',
-                'Incluye gastos de seguro y mantenimiento'
-            ]
-        },
-        {
-            'name': 'Casa Propia',
-            'description': 'Ahorra para la cuota inicial de tu primera vivienda',
-            'goal_type': 'purchase',
-            'suggested_amount': Decimal('50000.00'),
-            'suggested_timeframe_months': 36,
-            'icon': 'home',
-            'color': '#f59e0b',
-            'tips': [
-                'Investiga programas de gobierno (Mi Vivienda)',
-                'Mantén buen historial crediticio',
-                'Considera ubicación vs precio',
-                'Incluye gastos adicionales (notaría, etc.)'
-            ]
-        },
-        {
-            'name': 'Jubilación Temprana',
-            'description': 'Construye un fondo para jubilarte cómodamente',
-            'goal_type': 'retirement',
-            'suggested_amount': Decimal('100000.00'),
-            'suggested_timeframe_months': 120,  # 10 años
-            'icon': 'sunset',
-            'color': '#8b5cf6',
-            'tips': [
-                'Invierte en instrumentos de largo plazo',
-                'Diversifica tus inversiones',
-                'Aumenta aportes con incrementos salariales',
-                'Revisa estrategia anualmente'
-            ]
-        },
-        {
-            'name': 'Educación/Curso',
-            'description': 'Invierte en tu desarrollo profesional',
-            'goal_type': 'education',
-            'suggested_amount': Decimal('2500.00'),
-            'suggested_timeframe_months': 6,
-            'icon': 'graduation-cap',
-            'color': '#06b6d4',
-            'tips': [
-                'Investiga la calidad del programa',
-                'Considera el retorno de inversión',
-                'Busca becas o descuentos',
-                'Planifica tiempo de estudio'
-            ]
-        },
-        {
-            'name': 'Eliminar Deudas',
-            'description': 'Libérate de deudas de tarjetas de crédito',
-            'goal_type': 'debt_payment',
-            'suggested_amount': Decimal('5000.00'),
-            'suggested_timeframe_months': 12,
-            'icon': 'credit-card',
-            'color': '#dc2626',
-            'tips': [
-                'Lista todas tus deudas',
-                'Prioriza deudas con mayor interés',
-                'Evita contraer nuevas deudas',
-                'Negocia planes de pago si es necesario'
-            ]
-        },
-        {
-            'name': 'Emprendimiento',
-            'description': 'Capital inicial para tu propio negocio',
-            'goal_type': 'investment',
-            'suggested_amount': Decimal('10000.00'),
-            'suggested_timeframe_months': 15,
-            'icon': 'lightbulb',
-            'color': '#f97316',
-            'tips': [
-                'Desarrolla un plan de negocio sólido',
-                'Investiga tu mercado objetivo',
-                'Considera todos los costos iniciales',
-                'Mantén un fondo adicional para imprevistos'
-            ]
-        }
-    ]
-    
-    for template_data in templates:
-        GoalTemplate.objects.get_or_create(
-            name=template_data['name'],
-            defaults=template_data
-        )
-
-# =====================================================
-# CATEGORÍAS PREDETERMINADAS 
-# =====================================================
-def create_default_categories():
-    """Función para crear categorías predeterminadas"""
-    
-    default_categories = [
-        # Gastos principales
-        {'name': 'Alimentación', 'icon': 'utensils', 'color': '#ef4444', 'type': 'expense'},
-        {'name': 'Transporte', 'icon': 'car', 'color': '#f97316', 'type': 'expense'},
-        {'name': 'Vivienda', 'icon': 'home', 'color': '#eab308', 'type': 'expense'},
-        {'name': 'Entretenimiento', 'icon': 'gamepad2', 'color': '#22c55e', 'type': 'expense'},
-        {'name': 'Servicios', 'icon': 'zap', 'color': '#3b82f6', 'type': 'expense'},
-        {'name': 'Salud', 'icon': 'heart-pulse', 'color': '#8b5cf6', 'type': 'expense'},
-        {'name': 'Educación', 'icon': 'graduation-cap', 'color': '#06b6d4', 'type': 'expense'},
-        {'name': 'Compras', 'icon': 'shopping-cart', 'color': '#ec4899', 'type': 'expense'},
-        
-        # Ingresos
-        {'name': 'Salario', 'icon': 'banknote', 'color': '#10b981', 'type': 'income'},
-        {'name': 'Freelance', 'icon': 'laptop', 'color': '#059669', 'type': 'income'},
-        {'name': 'Inversiones', 'icon': 'trending-up', 'color': '#0d9488', 'type': 'income'},
-        {'name': 'Otros Ingresos', 'icon': 'plus-circle', 'color': '#14b8a6', 'type': 'income'},
-    ]
-    
-    for cat_data in default_categories:
-        Category.objects.get_or_create(
-            slug=cat_data['name'].lower().replace(' ', '-'),
-            defaults={
-                'name': cat_data['name'],
-                'icon': cat_data['icon'],
-                'color': cat_data['color'],
-                'category_type': cat_data['type']
-            }
-        )

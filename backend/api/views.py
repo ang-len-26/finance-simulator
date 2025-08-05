@@ -11,13 +11,11 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from decimal import Decimal
-from datetime import datetime, timedelta
 from django.db.models import Sum, Count, Q, Avg, Max, Min, F
-from django.db.models.functions import TruncMonth, TruncWeek, TruncDay, TruncYear
 from datetime import datetime, timedelta, date
-from calendar import monthrange
-import json
-from .models import Transaction, Account, Category, FinancialMetric, CategorySummary, BudgetAlert, FinancialGoal, GoalContribution, GoalMilestone, GoalTemplate
+
+# Imports locales
+from .models import Transaction, Account, Category, FinancialGoal, GoalContribution, BudgetAlert, GoalTemplate, CategorySummary, FinancialMetric
 from .serializers import (
     TransactionSerializer,
     AccountSerializer,
@@ -25,22 +23,23 @@ from .serializers import (
     TransactionSummarySerializer,
     CategorySerializer,
 	CategorySummarySerializer,
+    CategorySummaryReportSerializer,
     FinancialGoalSerializer, 
     FinancialGoalSummarySerializer,
+    FinancialMetricSerializer,
     GoalContributionSerializer, 
     GoalMilestoneSerializer, 
     GoalTemplateSerializer,
     GoalCreateFromTemplateSerializer, 
-    GoalProgressReportSerializer,
     GoalAnalyticsSerializer, 
-    GoalDashboardSerializer
+    GoalDashboardSerializer,
+    BudgetAlertSerializer
 )
 from .filters import TransactionFilter, FinancialGoalFilter, GoalContributionFilter
 
 # =====================================================
 # GESTION PARA CUENTAS BANCARIAS
 # =====================================================
-
 class AccountViewSet(viewsets.ModelViewSet):
     """ViewSet para gestión completa de cuentas bancarias"""
     serializer_class = AccountSerializer
@@ -212,7 +211,6 @@ class AccountViewSet(viewsets.ModelViewSet):
 # =====================================================
 # GESTION PARA TRANSACCIONES
 # =====================================================
-
 class TransactionViewSet(viewsets.ModelViewSet):
     """ViewSet actualizado con sistema de cuentas"""
     serializer_class = TransactionSerializer
@@ -325,7 +323,6 @@ class TransactionViewSet(viewsets.ModelViewSet):
 # =====================================================
 # SISTEMA DE REPORTES AVANZADOS
 # =====================================================
-
 class ReportsViewSet(viewsets.ViewSet):
     """ViewSet para reportes financieros avanzados"""
     permission_classes = [IsAuthenticated]
@@ -779,11 +776,37 @@ class ReportsViewSet(viewsets.ViewSet):
             'transactions': transactions_data,
             'total_count': Transaction.objects.filter(user=user).count()
         })
+    
+    @action(detail=False, methods=['get'])
+    def financial_metrics(self, request):
+        """Métricas financieras precalculadas por período"""
+        user = request.user
+    
+        # Parámetros
+        period_type = request.query_params.get('period_type', 'monthly')
+        limit = int(request.query_params.get('limit', 12))
+    
+        # Obtener métricas existentes
+        metrics = FinancialMetric.objects.filter(
+            user=user,
+            period_type=period_type
+        ).order_by('-period_start')[:limit]
+    
+        # Si no hay métricas, calcular automáticamente
+        if not metrics.exists():
+            # Crear métricas para los últimos períodos
+            metrics = self._generate_financial_metrics(user, period_type, limit)
+    
+        serializer = FinancialMetricSerializer(metrics, many=True)
+        return Response({
+            'metrics': serializer.data,
+            'period_type': period_type,
+            'total_periods': len(serializer.data)
+        })
 
 # =====================================================
 # GESTION PARA CATEGORÍAS
 # =====================================================
-
 class CategoryViewSet(viewsets.ModelViewSet):
     """ViewSet para gestión de categorías"""
     serializer_class = CategorySerializer
@@ -822,7 +845,72 @@ class CategoryViewSet(viewsets.ModelViewSet):
         if self.action == 'list':
             return CategorySummarySerializer
         return CategorySerializer
-    
+    	
+    def _generate_category_summaries(self, user, start_date, end_date, period_type):
+        """Generar resúmenes de categorías automáticamente"""
+        summaries = []
+        categories = Category.objects.filter(is_active=True)
+
+        for category in categories:
+            # Calcular métricas para esta categoría
+            transactions = Transaction.objects.filter(
+                user=user,
+                category=category,
+                date__range=[start_date, end_date]
+            )
+            
+            stats = transactions.aggregate(
+                total_amount=Sum('amount'),
+                transaction_count=Count('id'),
+                avg_amount=Avg('amount')
+            )
+            
+            # Período anterior para comparación
+            period_length = (end_date - start_date).days
+            prev_start = start_date - timedelta(days=period_length)
+            prev_end = start_date - timedelta(days=1)
+            
+            prev_stats = Transaction.objects.filter(
+                user=user,
+                category=category,
+                date__range=[prev_start, prev_end]
+            ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+            
+            # Calcular porcentaje de cambio
+            current_amount = stats['total_amount'] or Decimal('0.00')
+            percentage_change = 0
+            if prev_stats > 0:
+                percentage_change = float(((current_amount - prev_stats) / prev_stats) * 100)
+            
+            # Cuenta más utilizada
+            most_used_account = transactions.values('from_account').annotate(
+                count=Count('from_account')
+            ).order_by('-count').first()
+            
+            account_obj = None
+            if most_used_account:
+                account_obj = Account.objects.get(id=most_used_account['from_account'])
+            
+            # Crear o actualizar summary
+            summary, created = CategorySummary.objects.get_or_create(
+                user=user,
+                category=category,
+                period_start=start_date,
+                period_end=end_date,
+                period_type=period_type,
+                defaults={
+                    'total_amount': current_amount,
+                    'transaction_count': stats['transaction_count'] or 0,
+                    'average_amount': stats['avg_amount'] or Decimal('0.00'),
+                    'previous_period_amount': prev_stats,
+                    'percentage_change': Decimal(str(percentage_change)),
+                    'most_used_account': account_obj
+                }
+            )
+            summaries.append(summary)
+        
+        return CategorySummary.objects.filter(id__in=[s.id for s in summaries])
+
     @action(detail=False, methods=['get'])
     def by_type(self, request):
         """Categorías agrupadas por tipo (income/expense)"""
@@ -1041,7 +1129,48 @@ class CategoryViewSet(viewsets.ModelViewSet):
                 'total_active_categories': Category.objects.filter(is_active=True).count()
             }
         })
+    
+    @action(detail=False, methods=['get'])
+    def summary_report(self, request):
+        """Reporte de resumen por categorías con comparativas"""
+        user = request.user
 
+        # Parámetros
+        period_type = request.query_params.get('period_type', 'monthly')
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+
+        if not start_date or not end_date:
+            end_date = timezone.now().date()
+            if period_type == 'monthly':
+                start_date = end_date.replace(day=1)
+            else:
+                start_date = end_date - timedelta(days=30)
+        else:
+            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+
+        # Obtener o crear resúmenes
+        summaries = CategorySummary.objects.filter(
+            user=user,
+            period_type=period_type,
+            period_start=start_date,
+            period_end=end_date
+        )
+
+        # Si no existen, generarlos automáticamente
+        if not summaries.exists():
+            summaries = self._generate_category_summaries(user, start_date, end_date, period_type)
+
+        serializer = CategorySummaryReportSerializer(summaries, many=True)
+        return Response({
+            'category_summaries': serializer.data,
+            'period': {
+                'start_date': start_date,
+                'end_date': end_date,
+                'type': period_type
+            }
+        })
 
 # =====================================================
 # GESTIÓN DE METAS FINANCIERAS
@@ -1248,7 +1377,7 @@ class FinancialGoalViewSet(viewsets.ModelViewSet):
         
         is_on_track = goal.progress_percentage >= (expected_progress - 10)  # 10% de margen
         
-        return Response({
+        analytics_data = {
             'goal_id': goal.id,
             'goal_title': goal.title,
             'progress_trend': progress_trend,
@@ -1258,8 +1387,10 @@ class FinancialGoalViewSet(viewsets.ModelViewSet):
             'recommended_monthly_amount': float(goal.suggested_monthly_amount),
             'expected_progress': round(expected_progress, 1),
             'actual_progress': round(goal.progress_percentage, 1)
-        })
-    
+        }
+        serializer = GoalAnalyticsSerializer(analytics_data)
+        return Response(serializer.data)
+
     @action(detail=False, methods=['get'])
     def dashboard(self, request):
         """Dashboard completo de metas financieras"""
@@ -1321,15 +1452,17 @@ class FinancialGoalViewSet(viewsets.ModelViewSet):
         monthly_chart = self._get_monthly_progress_chart(user)
         type_chart = self._get_goals_by_type_chart(goals)
         
-        return Response({
+        dashboard_data = {
             'summary': summary,
             'recent_goals': FinancialGoalSummarySerializer(recent_goals, many=True).data,
             'urgent_goals': FinancialGoalSummarySerializer(urgent_goals, many=True).data,
             'top_performing_goals': FinancialGoalSummarySerializer(top_performing, many=True).data,
             'monthly_progress_chart': monthly_chart,
             'goals_by_type_chart': type_chart
-        })
-    
+        }
+        serializer = GoalDashboardSerializer(dashboard_data)
+        return Response(serializer.data)
+
     def _get_monthly_progress_chart(self, user):
         """Generar datos para gráfico de progreso mensual"""
         # Contribuciones de los últimos 6 meses
@@ -1487,9 +1620,36 @@ class GoalTemplateViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 # =====================================================
+# ALERTAS FINANCIERAS
+# =====================================================
+class BudgetAlertViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet para alertas financieras"""
+    serializer_class = BudgetAlertSerializer  # Crear este serializer
+    permission_classes = [IsAuthenticated]
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        return BudgetAlert.objects.filter(user=self.request.user)
+    
+    @action(detail=True, methods=['post'])
+    def mark_read(self, request, pk=None):
+        """Marcar alerta como leída"""
+        alert = self.get_object()
+        alert.is_read = True
+        alert.save(update_fields=['is_read'])
+        return Response({'status': 'marked_as_read'})
+    
+    @action(detail=False, methods=['get'])
+    def unread(self, request):
+        """Solo alertas no leídas"""
+        alerts = self.get_queryset().filter(is_read=False)
+        serializer = self.get_serializer(alerts, many=True)
+        return Response(serializer.data)
+
+
+# =====================================================
 # ENDPOINTS DE AUTENTICACIÓN Y UTILIDADES
 # =====================================================
-
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_user(request):
@@ -1588,7 +1748,7 @@ def create_demo_user(request):
 def create_superuser(request):
     """Endpoint para crear un superusuario"""
     try:
-        if User.objects.filter(username="admin").exists():
+        if User.objects.filter(username="AngelAdminFindTrack").exists():
             return Response({"status": "error", "message": "User already exists"}, status=400)
 
         User.objects.create_superuser(

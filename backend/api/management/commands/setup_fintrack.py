@@ -1,65 +1,61 @@
-#!/usr/bin/env python
-"""
-FinTrack - Script de configuración final
-Ejecuta migraciones, crea superusuario, categorías predeterminadas, datos demo y verifica configuración.
-"""
+# backend/api/management/commands/setup_fintrack.py
 
-import os
-import sys
-from pathlib import Path
-
-# Agregar el directorio del proyecto al path
-BASE_DIR = Path(__file__).resolve().parent
-if str(BASE_DIR) not in sys.path:
-    sys.path.append(str(BASE_DIR))
-
-# Configurar Django ANTES de importar modelos
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
-
-import django
-from django.core.management import execute_from_command_line
-django.setup()
-
-# Ahora importar después de configurar Django
+from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from decimal import Decimal
 from datetime import datetime, timedelta
+from django.core.management import call_command
 
-# Importar modelos después de configurar Django
 from api.models import (
     Account, Transaction, Category, GoalTemplate, 
     FinancialGoal, GoalContribution, UserProfile
 )
 
-class FinTrackSetup:
+class Command(BaseCommand):
+    help = 'Configura FinTrack con datos iniciales, categorías, plantillas y usuario demo'
+    
     def __init__(self):
+        super().__init__()
         self.success_count = 0
         self.error_count = 0
     
     def log_success(self, message):
-        print(f"✅ {message}")
+        self.stdout.write(self.style.SUCCESS(f"✅ {message}"))
         self.success_count += 1
     
     def log_error(self, message):
-        print(f"❌ {message}")
+        self.stdout.write(self.style.ERROR(f"❌ {message}"))
         self.error_count += 1
     
     def log_info(self, message):
-        print(f"ℹ️  {message}")
+        self.stdout.write(self.style.WARNING(f"ℹ️  {message}"))
+    
+    def handle(self, *args, **options):
+        self.stdout.write("🚀 FINTRACK - CONFIGURACIÓN AUTOMÁTICA")
+        self.stdout.write("Configurando sistema de finanzas personales...")
+        
+        # Ejecutar todos los pasos
+        self.run_migrations()
+        self.create_superuser()
+        self.create_categories()
+        self.create_goal_templates()
+        self.create_demo_user()
+        self.verify_setup()
+        self.print_summary()
     
     def run_migrations(self):
         """Ejecutar migraciones de Django"""
-        print("\n🔄 Ejecutando migraciones...")
+        self.stdout.write("\n🔄 Ejecutando migraciones...")
         try:
-            execute_from_command_line(['manage.py', 'makemigrations'])
-            execute_from_command_line(['manage.py', 'migrate'])
+            call_command('makemigrations', verbosity=0)
+            call_command('migrate', verbosity=0)
             self.log_success("Migraciones ejecutadas correctamente")
         except Exception as e:
             self.log_error(f"Error en migraciones: {e}")
     
     def create_superuser(self):
         """Crear superusuario si no existe"""
-        print("\n👤 Creando superusuario...")
+        self.stdout.write("\n👤 Creando superusuario...")
         try:
             if User.objects.filter(username="AngelAdminFindTrack").exists():
                 self.log_info("Superusuario 'AngelAdminFindTrack' ya existe")
@@ -76,7 +72,7 @@ class FinTrackSetup:
     
     def create_categories(self):
         """Crear categorías predeterminadas"""
-        print("\n📂 Creando categorías predeterminadas...")
+        self.stdout.write("\n📂 Creando categorías predeterminadas...")
         try:
             initial_count = Category.objects.count()
             
@@ -120,7 +116,7 @@ class FinTrackSetup:
     
     def create_goal_templates(self):
         """Crear plantillas de metas financieras"""
-        print("\n🎯 Creando plantillas de metas financieras...")
+        self.stdout.write("\n🎯 Creando plantillas de metas financieras...")
         try:
             initial_count = GoalTemplate.objects.count()
             
@@ -218,7 +214,7 @@ class FinTrackSetup:
 
     def create_demo_user(self):
         """Crear usuario demo con datos completos"""
-        print("\n🎭 Creando usuario demo...")
+        self.stdout.write("\n🎭 Creando usuario demo...")
         try:
             # Verificar si ya existe
             if User.objects.filter(username="demo").exists():
@@ -430,7 +426,7 @@ class FinTrackSetup:
     
     def create_demo_goals(self, user, cuentas):
         """Crear metas financieras demo"""	
-        print("🎯 Creando metas financieras demo...")
+        self.stdout.write("🎯 Creando metas financieras demo...")
         
         today = datetime.now().date()
         
@@ -509,7 +505,7 @@ class FinTrackSetup:
     
     def verify_setup(self):
         """Verificar que todo esté configurado correctamente"""
-        print("\n🔍 Verificando configuración...")
+        self.stdout.write("\n🔍 Verificando configuración...")
         
         try:
             # Verificar superusuario
@@ -550,42 +546,23 @@ class FinTrackSetup:
     
     def print_summary(self):
         """Mostrar resumen final"""
-        print("\n" + "="*60)
-        print("🎉 FINTRACK - CONFIGURACIÓN COMPLETADA")
-        print("="*60)
-        print(f"✅ Operaciones exitosas: {self.success_count}")
-        print(f"❌ Errores encontrados: {self.error_count}")
-        print("\n📋 CREDENCIALES DE ACCESO:")
-        print("👤 Admin Panel: http://localhost:8000/admin/")
-        print("   Username: AngelAdminFindTrack")
-        print("   Password: @FindTrack2025")
-        print("\n🎭 Usuario Demo:")
-        print("   Username: demo")
-        print("   Password: demo123")
-        print("\n🚀 API Endpoints:")
-        print("   Base URL: http://localhost:8000/api/")
-        print("   Documentación: Ver urls.py para endpoints completos")
-        print("\n🔧 Próximos pasos:")
-        print("   1. python manage.py runserver")
-        print("   2. Probar endpoints con el script test_all_endpoints.py")
-        print("   3. Configurar frontend React")
-        print("="*60)
-
-def main():
-    """Función principal de configuración"""
-    setup = FinTrackSetup()
-    
-    print("🚀 FINTRACK - CONFIGURACIÓN AUTOMÁTICA")
-    print("Configurando sistema de finanzas personales...")
-    
-    # Ejecutar todos los pasos
-    setup.run_migrations()
-    setup.create_superuser()
-    setup.create_categories()
-    setup.create_goal_templates()
-    setup.create_demo_user()
-    setup.verify_setup()
-    setup.print_summary()
-
-if __name__ == "__main__":
-    main()
+        self.stdout.write("\n" + "="*60)
+        self.stdout.write(self.style.SUCCESS("🎉 FINTRACK - CONFIGURACIÓN COMPLETADA"))
+        self.stdout.write("="*60)
+        self.stdout.write(f"✅ Operaciones exitosas: {self.success_count}")
+        self.stdout.write(f"❌ Errores encontrados: {self.error_count}")
+        self.stdout.write("\n📋 CREDENCIALES DE ACCESO:")
+        self.stdout.write("👤 Admin Panel: http://localhost:8000/admin/")
+        self.stdout.write("   Username: AngelAdminFindTrack")
+        self.stdout.write("   Password: @FindTrack2025")
+        self.stdout.write("\n🎭 Usuario Demo:")
+        self.stdout.write("   Username: demo")
+        self.stdout.write("   Password: demo123")
+        self.stdout.write("\n🚀 API Endpoints:")
+        self.stdout.write("   Base URL: http://localhost:8000/api/")
+        self.stdout.write("   Documentación: Ver urls.py para endpoints completos")
+        self.stdout.write("\n🔧 Próximos pasos:")
+        self.stdout.write("   1. python manage.py runserver")
+        self.stdout.write("   2. Probar endpoints con el script test_all_endpoints.py")
+        self.stdout.write("   3. Configurar frontend React")
+        self.stdout.write("="*60)

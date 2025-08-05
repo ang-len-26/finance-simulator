@@ -1,7 +1,5 @@
 from rest_framework import serializers
 from django.db import models
-from django.db.models import Sum
-from decimal import Decimal
 from django.utils import timezone
 from datetime import timedelta
 from .models import Transaction, Account, Category, FinancialMetric, CategorySummary, BudgetAlert, FinancialGoal, GoalContribution, GoalMilestone, GoalTemplate

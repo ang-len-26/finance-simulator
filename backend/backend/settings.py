@@ -23,7 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # ADVERTENCIA DE SEGURIDAD: mantenga en secreto la clave secreta utilizada en producción!
 SECRET_KEY = os.getenv('SECRET_KEY')
 # ADVERTENCIA DE SEGURIDAD: no ejecutar con la depuración activada en producción!
-DEBUG = False
+DEBUG = True
 # ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost").split(",")
 ALLOWED_HOSTS = ['*']
 
