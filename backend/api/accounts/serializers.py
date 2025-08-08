@@ -1,16 +1,13 @@
 from rest_framework import serializers
-from django.db import models
 
-from backend.api.accounts.models import Account
-from backend.api.transactions.models import Transaction
+from .models import Account
 
-# =====================================================
-# SERIALIZERS PARA CUENTAS
-# =====================================================
 class AccountSerializer(serializers.ModelSerializer):
     current_balance = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     transaction_count = serializers.SerializerMethodField()
     last_transaction_date = serializers.SerializerMethodField()
+    monthly_income = serializers.SerializerMethodField()
+    monthly_expenses = serializers.SerializerMethodField()
     
     class Meta:
         model = Account
@@ -18,23 +15,25 @@ class AccountSerializer(serializers.ModelSerializer):
             'id', 'name', 'bank_name', 'account_number', 'account_type',
             'initial_balance', 'current_balance', 'currency', 'is_active',
             'include_in_reports', 'transaction_count', 'last_transaction_date',
-            'created_at', 'updated_at'
+            'monthly_income', 'monthly_expenses', 'created_at', 'updated_at'
         ]
         read_only_fields = ['current_balance', 'created_at', 'updated_at']
     
     def get_transaction_count(self, obj):
         """Número total de transacciones de esta cuenta"""
-        return Transaction.objects.filter(
-            models.Q(from_account=obj) | models.Q(to_account=obj)
-        ).count()
+        return obj.transaction_count
     
     def get_last_transaction_date(self, obj):
         """Fecha de la última transacción"""
-        last_transaction = Transaction.objects.filter(
-            models.Q(from_account=obj) | models.Q(to_account=obj)
-        ).order_by('-date').first()
-        
-        return last_transaction.date if last_transaction else None
+        return obj.last_transaction_date
+    
+    def get_monthly_income(self, obj):
+        """Ingresos del mes actual"""
+        return float(obj.get_monthly_income())
+    
+    def get_monthly_expenses(self, obj):
+        """Gastos del mes actual"""
+        return float(obj.get_monthly_expenses())
     
     def validate_name(self, value):
         """Validar que el nombre de cuenta sea único por usuario"""
@@ -57,12 +56,16 @@ class AccountSerializer(serializers.ModelSerializer):
         if value < 0:
             raise serializers.ValidationError("El balance inicial no puede ser negativo.")
         return value
+    
+    def validate_currency(self, value):
+        """Validar código de moneda"""
+        valid_currencies = ['PEN', 'USD', 'EUR']
+        if value.upper() not in valid_currencies:
+            raise serializers.ValidationError(f"Moneda debe ser una de: {', '.join(valid_currencies)}")
+        return value.upper()
 
-# =====================================================
-# SERIALIZERS PARA LISTADOS DE CUENTAS
-# =====================================================
 class AccountSummarySerializer(serializers.ModelSerializer):
     """Serializer ligero para listados"""
     class Meta:
         model = Account
-        fields = ['id', 'name', 'bank_name', 'account_type', 'current_balance', 'currency']
+        fields = ['id', 'name', 'bank_name', 'account_type', 'current_balance', 'currency', 'is_active']

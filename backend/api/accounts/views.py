@@ -6,18 +6,21 @@ from django.utils import timezone
 from decimal import Decimal
 from django.db.models import Sum, Count, Q
 from datetime import timedelta
+from django_filters.rest_framework import DjangoFilterBackend
 
-from backend.api.transactions.models import Transaction
+from ..transactions.models import Transaction
 from .models import Account
 from .serializers import AccountSerializer, AccountSummarySerializer
+from .filters import AccountFilter
 
-# =====================================================
-# GESTION PARA CUENTAS BANCARIAS
-# =====================================================
 class AccountViewSet(viewsets.ModelViewSet):
     """ViewSet para gestión completa de cuentas bancarias"""
     serializer_class = AccountSerializer
     permission_classes = [IsAuthenticated]
+    
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = AccountFilter
+    
     ordering_fields = ['name', 'bank_name', 'current_balance', 'created_at']
     ordering = ['bank_name', 'name']
     
@@ -42,6 +45,9 @@ class AccountViewSet(viewsets.ModelViewSet):
     def transactions(self, request, pk=None):
         """Obtener todas las transacciones de una cuenta"""
         account = self.get_object()
+        
+        from ..transactions.serializers import TransactionSummarySerializer
+        
         transactions = Transaction.objects.filter(
             Q(from_account=account) | Q(to_account=account)
         ).order_by('-date')
@@ -63,7 +69,19 @@ class AccountViewSet(viewsets.ModelViewSet):
         
         # Calcular balance día por día
         balance_history = []
+        
+        # Balance inicial hace 30 días
+        initial_transactions = Transaction.objects.filter(
+            Q(from_account=account) | Q(to_account=account),
+            date__lt=thirty_days_ago
+        )
+        
         running_balance = account.initial_balance
+        for transaction in initial_transactions:
+            if transaction.from_account == account:
+                running_balance -= transaction.amount
+            if transaction.to_account == account:
+                running_balance += transaction.amount
         
         # Agrupar transacciones por día
         daily_transactions = {}
@@ -160,18 +178,20 @@ class AccountViewSet(viewsets.ModelViewSet):
         
         # Cuentas más utilizadas (por número de transacciones)
         most_used = []
-        for account in accounts[:5]:  # Top 5
+        for account in accounts[:10]:  # Top 10 para calcular
             transaction_count = Transaction.objects.filter(
                 Q(from_account=account) | Q(to_account=account)
             ).count()
             
-            most_used.append({
-                'id': account.id,
-                'name': account.name,
-                'bank_name': account.bank_name,
-                'transaction_count': transaction_count,
-                'balance': float(account.current_balance)
-            })
+            if transaction_count > 0:  # Solo cuentas con transacciones
+                most_used.append({
+                    'id': account.id,
+                    'name': account.name,
+                    'bank_name': account.bank_name,
+                    'account_type': account.account_type,
+                    'transaction_count': transaction_count,
+                    'balance': float(account.current_balance)
+                })
         
         most_used.sort(key=lambda x: x['transaction_count'], reverse=True)
         

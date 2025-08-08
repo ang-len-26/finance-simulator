@@ -9,9 +9,14 @@ from decimal import Decimal
 from django.db.models import Sum, Count, Q, Avg, F
 from datetime import timedelta, date
 
+from .filters import FinancialGoalFilter, GoalContributionFilter
 from .models import FinancialGoal, GoalContribution, GoalTemplate
-from .serializers import FinancialGoalSerializer, FinancialGoalSummarySerializer, GoalContributionSerializer, GoalDashboardSerializer, GoalTemplateSerializer
-
+from .serializers import (
+    FinancialGoalSerializer, FinancialGoalSummarySerializer, 
+    GoalContributionSerializer, GoalDashboardSerializer, 
+    GoalTemplateSerializer, GoalAnalyticsSerializer, 
+    GoalCreateFromTemplateSerializer, GoalMilestoneSerializer
+)
 # =====================================================
 # GESTIÓN DE METAS FINANCIERAS
 # =====================================================

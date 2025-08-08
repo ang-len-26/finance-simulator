@@ -1,28 +1,34 @@
-from rest_framework import viewsets
+from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import api_view, action
 from rest_framework.response import Response
 from rest_framework.decorators import permission_classes
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import OrderingFilter
 from django.utils import timezone
 from decimal import Decimal
 from django.db.models import Sum, Count, Q, Avg
 from datetime import datetime, timedelta
 
-from backend.api.accounts.models import Account
-from backend.api.transactions.models import Transaction
-from .models import FinancialMetric
-from .serializers import FinancialMetricSerializer
+from ..accounts.models import Account
+from ..transactions.models import Transaction
+from .models import FinancialMetric, BudgetAlert
+from .serializers import (
+    FinancialMetricSerializer, 
+    BudgetAlertSerializer
+)
 
-# =====================================================
-# SISTEMA DE REPORTES AVANZADOS
-# =====================================================
 class ReportsViewSet(viewsets.ViewSet):
-    """ViewSet para reportes financieros avanzados"""
+    """ViewSet mejorado para reportes financieros avanzados"""
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ['period_type']
+    ordering_fields = ['period_start', 'total_income', 'total_expenses']
+    ordering = ['-period_start']
     
     def _get_date_range(self, request):
-        """Utilidad para obtener rango de fechas desde parámetros"""
-        period = request.query_params.get('period', 'monthly')  # monthly, quarterly, yearly, custom
+        """Utilidad mejorada para obtener rango de fechas desde parámetros"""
+        period = request.query_params.get('period', 'monthly')
         
         today = timezone.now().date()
         
@@ -37,6 +43,12 @@ class ReportsViewSet(viewsets.ViewSet):
         elif period == 'yearly':
             start_date = today.replace(month=1, day=1)
             end_date = today
+        elif period == 'last_30_days':
+            end_date = today
+            start_date = today - timedelta(days=30)
+        elif period == 'last_90_days':
+            end_date = today
+            start_date = today - timedelta(days=90)
         elif period == 'custom':
             start_date = datetime.strptime(
                 request.query_params.get('start_date', str(today)), '%Y-%m-%d'
@@ -48,8 +60,107 @@ class ReportsViewSet(viewsets.ViewSet):
             start_date = today.replace(day=1)
             end_date = today
             
-        return start_date, end_date, period
+        return start_date, end_date, period        
     
+    @action(detail=False, methods=['get'])
+    def alerts(self, request):
+        """Endpoint para obtener alertas de presupuesto"""
+        user = request.user
+        
+        # Filtros
+        severity = request.query_params.get('severity')
+        alert_type = request.query_params.get('alert_type')
+        is_read = request.query_params.get('is_read')
+        
+        queryset = BudgetAlert.objects.filter(user=user)
+        
+        if severity:
+            queryset = queryset.filter(severity=severity)
+        if alert_type:
+            queryset = queryset.filter(alert_type=alert_type)
+        if is_read is not None:
+            queryset = queryset.filter(is_read=is_read.lower() == 'true')
+        
+        # Obtener solo alertas activas por defecto
+        if not request.query_params.get('include_dismissed'):
+            queryset = queryset.filter(is_dismissed=False)
+        
+        alerts = queryset.order_by('-created_at')[:20]
+        serializer = BudgetAlertSerializer(alerts, many=True)
+        
+        return Response({
+            'alerts': serializer.data,
+            'summary': {
+                'total_alerts': queryset.count(),
+                'unread_count': queryset.filter(is_read=False).count(),
+                'critical_count': queryset.filter(severity='critical').count()
+            }
+        })
+    
+    @action(detail=False, methods=['post'])
+    def mark_alert_read(self, request):
+        """Marcar alertas como leídas"""
+        alert_ids = request.data.get('alert_ids', [])
+        
+        if not alert_ids:
+            return Response(
+                {'error': 'Se requiere una lista de IDs de alertas'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        updated = BudgetAlert.objects.filter(
+            id__in=alert_ids,
+            user=request.user
+        ).update(is_read=True)
+        
+        return Response({
+            'message': f'{updated} alertas marcadas como leídas',
+            'updated_count': updated
+        })
+    
+    @action(detail=False, methods=['get'])
+    def category_trends(self, request):
+        """Tendencias de categorías a lo largo del tiempo"""
+        user = request.user
+        start_date, end_date, period = self._get_date_range(request)
+        
+        # Obtener tendencias de las últimas 6 semanas/meses
+        if period == 'monthly':
+            periods_back = 6
+            delta = timedelta(days=30)
+        else:
+            periods_back = 8
+            delta = timedelta(days=7)
+        
+        trends_data = []
+        current_end = end_date
+        
+        for i in range(periods_back):
+            current_start = current_end - delta
+            
+            # Gastos por categoría en este período
+            category_expenses = Transaction.objects.filter(
+                user=user,
+                type='expense',
+                date__range=[current_start, current_end]
+            ).values('category__name', 'category__color').annotate(
+                total=Sum('amount')
+            ).order_by('-total')[:5]
+            
+            trends_data.append({
+                'period': current_end.strftime('%b %Y' if period == 'monthly' else 'Sem %d'),
+                'start_date': current_start,
+                'end_date': current_end,
+                'categories': list(category_expenses)
+            })
+            
+            current_end = current_start
+        
+        return Response({
+            'trends': trends_data,
+            'period_type': period
+        })
+
     @action(detail=False, methods=['get'])
     def metrics(self, request):
         """Métricas principales con comparativas - Para las 4 tarjetas superiores"""

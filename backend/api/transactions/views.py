@@ -7,37 +7,101 @@ from django_filters.rest_framework import DjangoFilterBackend
 from decimal import Decimal
 from django.db.models import Sum, Count, Q, Avg, Max, Min
 from datetime import datetime, timedelta
+from django.core.management import call_command
 
-from backend.api.accounts.models import Account
-from backend.api.analytics.models import BudgetAlert, CategorySummary
+from ..accounts.models import Account
+from ..analytics.models import BudgetAlert, CategorySummary
+from ..analytics.serializers import BudgetAlertSerializer, CategorySummaryReportSerializer
+from .filters import TransactionFilter
 from .models import Transaction, Category
-from .serializers import TransactionSerializer, TransactionSummarySerializer, CategorySerializer, CategorySummarySerializer, CategorySummaryReportSerializer
+from .serializers import TransactionSerializer, TransactionSummarySerializer, CategorySerializer, CategorySummarySerializer
 
 # =====================================================
 # GESTION PARA TRANSACCIONES
 # =====================================================
 class TransactionViewSet(viewsets.ModelViewSet):
-    """ViewSet actualizado con sistema de cuentas"""
+    """ViewSet completo con filtros implementados"""
     serializer_class = TransactionSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_class = TransactionFilter
-    ordering_fields = ['date', 'amount', 'title']
-    ordering = ['-date']
+    ordering_fields = ['date', 'amount', 'title', 'type', 'created_at']
+    ordering = ['-date', '-created_at']
     
     def get_queryset(self):
-        """Solo transacciones del usuario actual"""
-        return Transaction.objects.filter(user=self.request.user)
+        """Solo transacciones del usuario actual con select_related"""
+        return Transaction.objects.select_related(
+            'from_account', 'to_account', 'category', 'user'
+        ).filter(user=self.request.user)
     
     def get_serializer_class(self):
-        """Usar serializer ligero para list"""
+        """Usar serializer apropiado según acción"""
         if self.action == 'list':
             return TransactionSummarySerializer
+        elif self.action == 'dashboard':
+            return TransactionSummarySerializer
         return TransactionSerializer
+    
+    def get_filterset_kwargs(self):
+        """Pasar request al filterset para queryset dinámico"""
+        kwargs = super().get_filterset_kwargs()
+        if hasattr(self, 'request'):
+            kwargs['request'] = self.request
+        return kwargs
     
     def perform_create(self, serializer):
         """Asociar transacción con usuario actual"""
         serializer.save(user=self.request.user)
+    
+    # Endpoints personalizados mejorados
+    @action(detail=False, methods=['get'])
+    def recent(self, request):
+        """Transacciones recientes (últimas 10)"""
+        recent_transactions = self.get_queryset()[:10]
+        serializer = TransactionSummarySerializer(recent_transactions, many=True)
+        return Response({
+            'transactions': serializer.data,
+            'total_count': self.get_queryset().count()
+        })
+    
+    @action(detail=False, methods=['get'])
+    def by_type(self, request):
+        """Transacciones agrupadas por tipo"""
+        transaction_types = dict(Transaction.TRANSACTION_TYPES)
+        
+        grouped_data = {}
+        for type_key, type_label in transaction_types.items():
+            transactions = self.get_queryset().filter(type=type_key)[:5]
+            grouped_data[type_key] = {
+                'label': type_label,
+                'count': transactions.count(),
+                'transactions': TransactionSummarySerializer(transactions, many=True).data
+            }
+        
+        return Response(grouped_data)
+    
+    @action(detail=False, methods=['get'])
+    def search(self, request):
+        """Búsqueda avanzada de transacciones"""
+        query = request.query_params.get('q', '')
+        
+        if not query:
+            return Response({'error': 'Parámetro q requerido'}, status=400)
+        
+        # Buscar en título, descripción, referencia y ubicación
+        transactions = self.get_queryset().filter(
+            Q(title__icontains=query) |
+            Q(description__icontains=query) |
+            Q(reference_number__icontains=query) |
+            Q(location__icontains=query)
+        )[:20]
+        
+        serializer = TransactionSummarySerializer(transactions, many=True)
+        return Response({
+            'query': query,
+            'results': serializer.data,
+            'count': len(serializer.data)
+        })
     
     @action(detail=False, methods=['get'])
     def dashboard(self, request):
@@ -368,20 +432,15 @@ class CategoryViewSet(viewsets.ModelViewSet):
     def create_defaults(self, request):
         """Crear categorías predeterminadas"""
         try:
-            from .models import create_default_categories
-            create_default_categories()
-            
-            # Contar categorías creadas
+            call_command('setup_categories', verbosity=0)
             total_categories = Category.objects.count()
-            
             return Response({
                 'message': 'Categorías predeterminadas creadas exitosamente',
                 'total_categories': total_categories
             })
-            
         except Exception as e:
             return Response(
-                {'error': f'Error al crear categorías: {str(e)}'}, 
+                {'error': f'Error al crear categorías: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
@@ -498,7 +557,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 # =====================================================
 class BudgetAlertViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet para alertas financieras"""
-    serializer_class = BudgetAlertSerializer  # Crear este serializer
+    serializer_class = BudgetAlertSerializer
     permission_classes = [IsAuthenticated]
     ordering = ['-created_at']
     

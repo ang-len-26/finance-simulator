@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
-
-class ApiConfig(AppConfig):
+class GoalsConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'api'
+    name = 'api.goals'
+    verbose_name = 'Metas Financieras'

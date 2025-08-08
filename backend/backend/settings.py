@@ -47,10 +47,22 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-	'corsheaders',
+    
+    # Django REST Framework
     'rest_framework',
-    'api',
+    'rest_framework_simplejwt',
 	'django_filters',
+    
+    # CORS
+    'corsheaders',
+    
+    # FinTrack Apps Modulares (ORDEN IMPORTANTE)
+    'api.core',           # Base: usuarios, auth
+    'api.accounts',       # Cuentas bancarias
+    'api.transactions',   # Transacciones y categorías  
+    'api.analytics',      # Reportes y métricas
+    'api.goals',          # Metas financieras
+
 ]
 # CORS (Cross-Origin Resource Sharing) settings
 CORS_ALLOWED_ORIGINS = [

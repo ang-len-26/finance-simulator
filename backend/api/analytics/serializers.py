@@ -1,3 +1,4 @@
+from datetime import timedelta
 from rest_framework import serializers
 
 from .models import BudgetAlert, CategorySummary, FinancialMetric
@@ -143,4 +144,116 @@ class ReportsOverviewSerializer(serializers.Serializer):
     period = serializers.DictField()
     charts = serializers.DictField()
     insights = serializers.DictField()
+    
+class FinancialMetricComparisonSerializer(serializers.ModelSerializer):
+    """Serializer con comparativas entre períodos"""
+    period_label = serializers.SerializerMethodField()
+    savings_rate = serializers.ReadOnlyField()
+    expense_ratio = serializers.ReadOnlyField()
+    previous_period_comparison = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = FinancialMetric
+        fields = [
+            'id', 'period_type', 'period_start', 'period_end', 'period_label',
+            'total_income', 'total_expenses', 'net_balance', 'savings_rate', 'expense_ratio',
+            'checking_balance', 'savings_balance', 'investment_balance', 'credit_balance',
+            'transaction_count', 'top_expense_category', 'top_expense_amount',
+            'previous_period_comparison', 'calculated_at'
+        ]
+    
+    def get_period_label(self, obj):
+        """Etiqueta legible del período"""
+        if obj.period_type == 'monthly':
+            return obj.period_start.strftime('%B %Y')
+        elif obj.period_type == 'quarterly':
+            quarter = (obj.period_start.month - 1) // 3 + 1
+            return f"Q{quarter} {obj.period_start.year}"
+        elif obj.period_type == 'yearly':
+            return str(obj.period_start.year)
+        else:
+            return f"{obj.period_start} - {obj.period_end}"
+    
+    def get_previous_period_comparison(self, obj):
+        """Comparación con período anterior"""
+        try:
+            # Buscar período anterior
+            period_length = (obj.period_end - obj.period_start).days
+            prev_start = obj.period_start - timedelta(days=period_length)
+            prev_end = obj.period_start - timedelta(days=1)
+            
+            previous = FinancialMetric.objects.filter(
+                user=obj.user,
+                period_type=obj.period_type,
+                period_start=prev_start,
+                period_end=prev_end
+            ).first()
+            
+            if previous:
+                def calc_change(current, prev):
+                    if prev == 0:
+                        return 0 if current == 0 else 100
+                    return float(((current - prev) / prev) * 100)
+                
+                return {
+                    'income_change': round(calc_change(obj.total_income, previous.total_income), 2),
+                    'expense_change': round(calc_change(obj.total_expenses, previous.total_expenses), 2),
+                    'balance_change': round(calc_change(obj.net_balance, previous.net_balance), 2),
+                    'previous_period': {
+                        'total_income': float(previous.total_income),
+                        'total_expenses': float(previous.total_expenses),
+                        'net_balance': float(previous.net_balance)
+                    }
+                }
+        except:
+            pass
+        
+        return None
  
+class BudgetAlertDetailSerializer(serializers.ModelSerializer):
+    """Serializer detallado para alertas con relaciones completas"""
+    related_transaction_details = serializers.SerializerMethodField()
+    related_category_details = serializers.SerializerMethodField()
+    related_account_details = serializers.SerializerMethodField()
+    severity_label = serializers.SerializerMethodField()
+    alert_type_label = serializers.SerializerMethodField()
+    days_since_created = serializers.ReadOnlyField()
+    is_active = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = BudgetAlert
+        fields = '__all__'
+    
+    def get_related_transaction_details(self, obj):
+        if obj.related_transaction:
+            return {
+                'id': obj.related_transaction.id,
+                'title': obj.related_transaction.title,
+                'amount': obj.related_transaction.amount,
+                'date': obj.related_transaction.date
+            }
+        return None
+    
+    def get_related_category_details(self, obj):
+        if obj.related_category:
+            return {
+                'name': obj.related_category.name,
+                'icon': obj.related_category.icon,
+                'color': obj.related_category.color
+            }
+        return None
+    
+    def get_related_account_details(self, obj):
+        if obj.related_account:
+            return {
+                'name': obj.related_account.name,
+                'account_type': obj.related_account.account_type,
+                'current_balance': obj.related_account.current_balance
+            }
+        return None
+    
+    def get_severity_label(self, obj):
+        return dict(BudgetAlert.SEVERITY_LEVELS).get(obj.severity, obj.severity)
+    
+    def get_alert_type_label(self, obj):
+        return dict(BudgetAlert.ALERT_TYPES).get(obj.alert_type, obj.alert_type)

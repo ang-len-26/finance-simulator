@@ -2,8 +2,8 @@ from rest_framework import serializers
 from django.utils import timezone
 from datetime import timedelta
 
-from backend.api.accounts.models import Account
-from backend.api.goals.models import FinancialGoal, GoalContribution, GoalMilestone, GoalTemplate
+from ..accounts.models import Account
+from .models import FinancialGoal, GoalContribution, GoalMilestone, GoalTemplate
 
     
 # =====================================================

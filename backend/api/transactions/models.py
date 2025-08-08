@@ -1,7 +1,9 @@
+from decimal import Decimal
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils.text import slugify
 
-from backend.api.accounts.models import Account
+from ..accounts.models import Account
 
 # =====================================================
 # Categorías para clasificación avanzada de transacciones
@@ -42,6 +44,29 @@ class Category(models.Model):
         if self.parent:
             return f"{self.parent.name} > {self.name}"
         return self.name
+        # Métodos helper agregados
+    def get_full_name(self):
+        """Nombre completo con jerarquía"""
+        if self.parent:
+            return f"{self.parent.name} > {self.name}"
+        return self.name
+    
+    def get_transaction_total(self, user=None):
+        """Total de transacciones en esta categoría"""
+        qs = self.transaction_set.all()
+        if user:
+            qs = qs.filter(user=user)
+        return qs.aggregate(total=models.Sum('amount'))['total'] or Decimal('0.00')
+    
+    def get_subcategory_count(self):
+        """Número de subcategorías activas"""
+        return self.subcategories.filter(is_active=True).count()
+    
+    def save(self, *args, **kwargs):
+        """Auto-generar slug"""
+        if not self.slug:
+            self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
 
 # =====================================================
 # Transactiones con soporte para cuentas y categorías
@@ -141,3 +166,47 @@ class Transaction(models.Model):
                 old_transaction.from_account.update_balance()
             if old_transaction.to_account and old_transaction.to_account != self.to_account:
                 old_transaction.to_account.update_balance()
+    
+	# Propiedades agregadas
+    @property
+    def is_income(self):
+        """¿Es una transacción de ingreso?"""
+        return self.type == 'income'
+    
+    @property
+    def is_expense(self):
+        """¿Es una transacción de gasto?"""
+        return self.type == 'expense'
+    
+    @property
+    def is_transfer(self):
+        """¿Es una transferencia entre cuentas?"""
+        return self.type == 'transfer'
+    
+    @property
+    def affects_balance(self):
+        """¿Esta transacción afecta el balance de las cuentas?"""
+        return self.type in ['income', 'expense', 'transfer', 'investment', 'savings']
+    
+    @property
+    def main_account(self):
+        """Cuenta principal de la transacción"""
+        return self.from_account or self.to_account
+    
+    def get_cash_flow_impact(self):
+        """Impacto en el flujo de efectivo"""
+        if self.type == 'income':
+            return float(self.amount)
+        elif self.type in ['expense', 'investment', 'debt', 'savings']:
+            return -float(self.amount)
+        else:  # transfer, loan, other
+            return 0.0
+    
+    def get_display_amount(self):
+        """Monto para mostrar (con signo)"""
+        if self.is_income:
+            return f"+${self.amount}"
+        elif self.is_expense:
+            return f"-${self.amount}"
+        else:
+            return f"${self.amount}"
