@@ -52,7 +52,7 @@ backend/
 
 ```bash
 # 1. Clonar y navegar
-git clone <repo-url>
+git clone https://github.com/ang-len-26/finance-simulator.git
 cd finance-simulator/backend
 
 # 2. Crear entorno virtual
@@ -73,25 +73,6 @@ python manage.py migrate
 
 # 6. Configuración automática completa
 python manage.py setup_all
-```
-
-### **Variables de Entorno (.env)**
-
-```bash
-# Base de Datos PostgreSQL
-DB_NAME=findtrackdb
-DB_USER=tu_usuario
-DB_PASSWORD=tu_password
-DB_HOST=localhost
-DB_PORT=5432
-
-# Django
-SECRET_KEY=tu_secret_key_muy_segura
-DEBUG=True
-ALLOWED_HOSTS=localhost,127.0.0.1
-
-# JWT
-JWT_SECRET_KEY=tu_jwt_secret_key
 ```
 
 ## 📦 Módulos del Sistema
@@ -207,7 +188,7 @@ python manage.py setup_demo_goals
 
 - **URL**: `http://localhost:8000/admin/`
 - **Usuario**: `AngelAdminFindTrack`
-- **Contraseña**: `@FindTrack2025`
+- **Contraseña**: `******`
 
 #### **🎭 Usuario Demo**
 

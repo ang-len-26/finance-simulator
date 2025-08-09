@@ -129,10 +129,6 @@ def create_demo_user(request):
 
 @api_view(["POST"])
 def create_superuser(request):
-    """
-    Endpoint para crear un superusuario - VERSIÓN SEGURA
-    ⚠️ REQUIERE variables de entorno configuradas
-    """
     
     admin_username = os.getenv('ADMIN_USERNAME')
     admin_email = os.getenv('ADMIN_EMAIL')

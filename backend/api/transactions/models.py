@@ -2,6 +2,7 @@ from decimal import Decimal
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils.text import slugify
+from django.core.exceptions import ValidationError
 
 from ..accounts.models import Account
 
@@ -44,7 +45,7 @@ class Category(models.Model):
         if self.parent:
             return f"{self.parent.name} > {self.name}"
         return self.name
-        # Métodos helper agregados
+        
     def get_full_name(self):
         """Nombre completo con jerarquía"""
         if self.parent:
@@ -69,7 +70,7 @@ class Category(models.Model):
         super().save(*args, **kwargs)
 
 # =====================================================
-# Transactiones con soporte para cuentas y categorías
+# Transacciones con soporte para cuentas y categorías
 # =====================================================
 class Transaction(models.Model):
     TRANSACTION_TYPES = (
@@ -91,12 +92,14 @@ class Transaction(models.Model):
     description = models.TextField(blank=True, null=True)
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
     
-    # NUEVOS CAMPOS: Sistema de cuentas
+    # CAMPOS CORREGIDOS: Sistema de cuentas con validación lógica
     from_account = models.ForeignKey(
         Account, 
         on_delete=models.CASCADE, 
         related_name='outgoing_transactions',
-        help_text="Cuenta de origen (obligatorio para gastos/transferencias)"
+        null=True,
+        blank=True,
+        help_text="Cuenta de origen (para gastos/transferencias)"
     )
     to_account = models.ForeignKey(
         Account, 
@@ -144,8 +147,37 @@ class Transaction(models.Model):
     def __str__(self):
         return f"{self.title} - {self.type} - {self.amount} - {self.date}"
     
+    def clean(self):
+        """Validación personalizada según el tipo de transacción"""
+        super().clean()
+        
+        if self.type == 'income' and not self.to_account:
+            raise ValidationError({
+                'to_account': 'Las transacciones de ingreso requieren una cuenta destino (to_account)'
+            })
+        elif self.type == 'expense' and not self.from_account:
+            raise ValidationError({
+                'from_account': 'Las transacciones de gasto requieren una cuenta origen (from_account)'
+            })
+        elif self.type == 'transfer':
+            if not self.from_account:
+                raise ValidationError({
+                    'from_account': 'Las transferencias requieren una cuenta origen'
+                })
+            if not self.to_account:
+                raise ValidationError({
+                    'to_account': 'Las transferencias requieren una cuenta destino'
+                })
+            if self.from_account == self.to_account:
+                raise ValidationError({
+                    '__all__': 'No se puede transferir a la misma cuenta'
+                })
+    
     def save(self, *args, **kwargs):
-        """Override save para actualizar balances de cuentas"""
+        """Override save con validación y actualización de balances"""
+        # Ejecutar validación antes de guardar
+        self.full_clean()
+        
         is_new = self.pk is None
         old_transaction = None
         
@@ -167,7 +199,7 @@ class Transaction(models.Model):
             if old_transaction.to_account and old_transaction.to_account != self.to_account:
                 old_transaction.to_account.update_balance()
     
-	# Propiedades agregadas
+    # Propiedades agregadas
     @property
     def is_income(self):
         """¿Es una transacción de ingreso?"""
@@ -210,3 +242,14 @@ class Transaction(models.Model):
             return f"-${self.amount}"
         else:
             return f"${self.amount}"
+    
+    def get_account_for_type(self):
+        """Retorna la cuenta principal según el tipo de transacción"""
+        if self.type == 'income':
+            return self.to_account
+        elif self.type in ['expense', 'investment', 'debt', 'savings']:
+            return self.from_account
+        elif self.type == 'transfer':
+            return {'from': self.from_account, 'to': self.to_account}
+        else:
+            return self.from_account or self.to_account

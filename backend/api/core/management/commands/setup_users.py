@@ -2,6 +2,8 @@ from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from django.core.management import call_command
 from api.core.models import UserProfile
+import os
+from django.conf import settings
 
 class Command(BaseCommand):
     help = 'Configura usuarios del sistema: superusuario y perfiles base'
@@ -44,23 +46,21 @@ class Command(BaseCommand):
         """Crear superusuario si no existe"""
         self.stdout.write("\n👤 Creando superusuario...")
         try:
-            if User.objects.filter(username="AngelAdminFindTrack").exists():
-                self.log_info("Superusuario 'AngelAdminFindTrack' ya existe")
+            admin_username = os.getenv('ADMIN_USERNAME', 'admin')
+            admin_password = os.getenv('ADMIN_PASSWORD', 'changeme123')
+            admin_email = os.getenv('ADMIN_EMAIL', 'admin@fintrack.com')
+
+            if User.objects.filter(username=admin_username).exists():
+                self.log_info(f"Superusuario '{admin_username}' ya existe")
                 return
-            
+
             superuser = User.objects.create_superuser(
-                username="AngelAdminFindTrack",
-                email="adminfindTrack@findtrack.com",
-                password="@FindTrack2025"
+                username=admin_username,
+                email=admin_email,
+                password=admin_password
             )
-            
-            # Crear perfil para el superusuario
-            UserProfile.objects.get_or_create(
-                user=superuser,
-                defaults={'is_demo': False}
-            )
-            
-            self.log_success("Superusuario creado - Username: AngelAdminFindTrack, Password: @FindTrack2025")
+
+            self.log_success(f"Superusuario creado - Username: {admin_username}")
         except Exception as e:
             self.log_error(f"Error al crear superusuario: {e}")
     
@@ -94,7 +94,8 @@ class Command(BaseCommand):
         self.stdout.write(f"✅ Operaciones exitosas: {self.success_count}")
         self.stdout.write(f"❌ Errores encontrados: {self.error_count}")
         self.stdout.write("\n📋 USUARIOS CONFIGURADOS:")
-        self.stdout.write("👤 Superusuario: AngelAdminFindTrack")
+        admin_username = os.getenv('ADMIN_USERNAME', 'admin')
+        self.stdout.write(f"👤 Superusuario: {admin_username}")
         self.stdout.write(f"📊 Total usuarios: {User.objects.count()}")
         self.stdout.write(f"📈 Total perfiles: {UserProfile.objects.count()}")
         self.stdout.write("="*50)

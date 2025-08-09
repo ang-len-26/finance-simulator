@@ -2,6 +2,7 @@ from django.core.management.base import BaseCommand
 from django.core.management import call_command
 from django.contrib.auth.models import User
 import time
+import os
 
 class Command(BaseCommand):
     help = 'Ejecuta toda la configuración de FinTrack: migra, crea datos iniciales y usuario demo'
@@ -96,9 +97,11 @@ class Command(BaseCommand):
         try:
             if reset:
                 self.log_info("Limpiando usuarios existentes...")
+                admin_username = os.getenv('ADMIN_USERNAME', 'admin')
+                demo_username = os.getenv('DEMO_USERNAME', 'demo')
                 User.objects.filter(
-                    username__in=['AngelAdminFindTrack', 'demo']
-                ).delete()
+                    username__in=[admin_username, demo_username]
+            ).delete()
             
             self.log_info("Creando superusuario y configuración core...")
             call_command('setup_users', verbosity=1)
@@ -179,7 +182,8 @@ class Command(BaseCommand):
             from api.accounts.models import Account
             
             # Verificar usuarios
-            superuser_exists = User.objects.filter(username="AngelAdminFindTrack").exists()
+            admin_username = os.getenv('ADMIN_USERNAME', 'admin')
+            superuser_exists = User.objects.filter(username=admin_username).exists()
             demo_exists = User.objects.filter(username="demo").exists()
             
             if superuser_exists:
@@ -216,8 +220,9 @@ class Command(BaseCommand):
         
         self.stdout.write("\n📋 CREDENCIALES DE ACCESO:")
         self.stdout.write("👤 Panel Admin: http://localhost:8000/admin/")
-        self.stdout.write("   Username: AngelAdminFindTrack")
-        self.stdout.write("   Password: @FindTrack2025")
+        admin_username = os.getenv('ADMIN_USERNAME', 'admin')
+        self.stdout.write(f"   Username: {admin_username}")
+        self.stdout.write("   Password: [Configurado en variables de entorno]")
         
         if User.objects.filter(username="demo").exists():
             self.stdout.write("\n🎭 Usuario Demo:")
