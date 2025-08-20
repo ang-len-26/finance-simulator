@@ -1,32 +1,16 @@
-from django.core.management.base import BaseCommand
+from api.core.management.base import FinTrackBaseCommand
 from decimal import Decimal
 
 from api.goals.models import GoalTemplate
 
-class Command(BaseCommand):
+class Command(FinTrackBaseCommand):
     help = 'Configura plantillas predeterminadas para metas financieras'
-    
-    def __init__(self):
-        super().__init__()
-        self.success_count = 0
-        self.error_count = 0
-    
-    def log_success(self, message):
-        self.stdout.write(self.style.SUCCESS(f"✅ {message}"))
-        self.success_count += 1
-    
-    def log_error(self, message):
-        self.stdout.write(self.style.ERROR(f"❌ {message}"))
-        self.error_count += 1
-    
-    def log_info(self, message):
-        self.stdout.write(self.style.WARNING(f"ℹ️  {message}"))
     
     def handle(self, *args, **options):
         self.stdout.write("🎯 GOALS - Configurando plantillas de metas financieras...")
         
         self.create_goal_templates()
-        self.print_summary()
+        self.print_summary("GOALS - PLANTILLAS CONFIGURADAS", "goals")
     
     def create_goal_templates(self):
         """Crear plantillas de metas financieras"""
@@ -193,20 +177,21 @@ class Command(BaseCommand):
         except Exception as e:
             self.log_error(f"Error al crear plantillas de metas: {e}")
     
-    def print_summary(self):
-        """Mostrar resumen del comando"""
-        self.stdout.write("\n" + "="*50)
-        self.stdout.write(self.style.SUCCESS("🎉 GOALS - PLANTILLAS CONFIGURADAS"))
-        self.stdout.write("="*50)
-        self.stdout.write(f"✅ Operaciones exitosas: {self.success_count}")
-        self.stdout.write(f"❌ Errores encontrados: {self.error_count}")
-        self.stdout.write(f"\n📊 RESUMEN DE PLANTILLAS:")
-        
-        # Estadísticas por tipo
-        template_types = GoalTemplate.objects.values_list('goal_type', flat=True).distinct()
-        for goal_type in template_types:
-            count = GoalTemplate.objects.filter(goal_type=goal_type).count()
-            self.stdout.write(f"📋 {goal_type.replace('_', ' ').title()}: {count}")
-        
-        self.stdout.write(f"📈 Total plantillas: {GoalTemplate.objects.count()}")
-        self.stdout.write("="*50)
+
+    def get_summary_stats(self):
+        """Obtener estadísticas para el resumen"""
+        from django.db.models import Count
+
+        template_stats = GoalTemplate.objects.values('goal_type').annotate(
+            count=Count('id')
+        ).order_by('goal_type')
+
+        summary_lines = []
+        for stat in template_stats:
+            goal_type_display = stat['goal_type'].replace('_', ' ').title()
+            summary_lines.append(f"📋 {goal_type_display}: {stat['count']}")
+
+        # Total al final
+        summary_lines.append(f"📊 Total plantillas: {GoalTemplate.objects.count()}")
+
+        return summary_lines	

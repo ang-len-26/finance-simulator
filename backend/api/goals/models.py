@@ -366,35 +366,7 @@ class GoalTemplate(models.Model):
             return user_expenses * 6
         
         return self.suggested_amount or Decimal('1000.00')
-    def create_default_goal_templates():
-        """Crear plantillas predeterminadas si no existen"""
-        templates = [
-            {
-                'name': 'Fondo de Emergencia',
-                'description': 'Ahorra 6 meses de gastos para emergencias',
-                'goal_type': 'emergency_fund',
-                'suggested_timeframe_months': 12,
-                'icon': 'shield',
-                'color': '#ef4444',
-                'tips': ['Ahorra automáticamente', 'Usa cuenta separada', 'No toques el dinero']
-            },
-            {
-                'name': 'Vacaciones',
-                'description': 'Planifica y ahorra para tus vacaciones ideales',
-                'goal_type': 'vacation',
-                'suggested_amount': 2000,
-                'suggested_timeframe_months': 8,
-                'icon': 'plane',
-                'color': '#06b6d4',
-                'tips': ['Establece un presupuesto', 'Compara precios', 'Reserva con anticipación']
-            },
-        ]
-    
-        for template_data in templates:
-            GoalTemplate.objects.get_or_create(
-                name=template_data['name'],
-                defaults=template_data
-          )
+
 
 
 

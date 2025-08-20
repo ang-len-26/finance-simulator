@@ -1,4 +1,4 @@
-from django.core.management.base import BaseCommand
+from api.core.management.base import FinTrackBaseCommand
 from django.contrib.auth.models import User
 from django.utils import timezone
 from decimal import Decimal
@@ -8,24 +8,8 @@ from api.analytics.models import FinancialMetric, CategorySummary, BudgetAlert
 from api.transactions.models import Category
 from api.accounts.models import Account
 
-class Command(BaseCommand):
+class Command(FinTrackBaseCommand):
     help = 'Configurar sistema de analytics y métricas iniciales'
-    
-    def __init__(self):
-        super().__init__()
-        self.success_count = 0
-        self.error_count = 0
-    
-    def log_success(self, message):
-        self.stdout.write(self.style.SUCCESS(f"✅ {message}"))
-        self.success_count += 1
-    
-    def log_error(self, message):
-        self.stdout.write(self.style.ERROR(f"❌ {message}"))
-        self.error_count += 1
-    
-    def log_info(self, message):
-        self.stdout.write(self.style.WARNING(f"ℹ️  {message}"))
     
     def handle(self, *args, **options):
         self.stdout.write("📊 ANALYTICS - Configurando sistema de métricas...")
@@ -33,7 +17,7 @@ class Command(BaseCommand):
         self.setup_demo_metrics()
         self.setup_demo_category_summaries()
         self.setup_demo_alerts()
-        self.print_summary()
+        self.print_summary("ANALYTICS - CONFIGURACIÓN COMPLETADA", "analytics")
     
     def setup_demo_metrics(self):
         """Crear métricas financieras para usuario demo"""
@@ -42,7 +26,7 @@ class Command(BaseCommand):
         try:
             demo_user = User.objects.filter(username="demo").first()
             if not demo_user:
-                self.log_info("Usuario demo no encontrado, saltando métricas demo")
+                self.log_info("Usuario demo no encontrado - ejecutar después de crear demo")
                 return
             
             today = timezone.now().date()
@@ -284,21 +268,17 @@ class Command(BaseCommand):
             
         except Exception as e:
             self.log_error(f"Error al crear alertas demo: {e}")
-    
-    def print_summary(self):
-        """Mostrar resumen de configuración analytics"""
-        self.stdout.write("\n" + "="*50)
-        self.stdout.write("📊 ANALYTICS - CONFIGURACIÓN COMPLETADA")
-        self.stdout.write("="*50)
-        self.stdout.write(f"✅ Operaciones exitosas: {self.success_count}")
-        self.stdout.write(f"❌ Errores encontrados: {self.error_count}")
-        
-        if self.success_count > 0:
-            self.stdout.write("\n🎯 Sistema de Analytics configurado:")
-            self.stdout.write("   • Métricas financieras demo creadas")
-            self.stdout.write("   • Resúmenes de categorías configurados")
-            self.stdout.write("   • Alertas de ejemplo activadas")
-            self.stdout.write("\n💡 Comandos útiles:")
-            self.stdout.write("   python manage.py generate_metrics")
-        
-        self.stdout.write("="*50)
+
+    def get_summary_stats(self):
+        """Obtener estadísticas para el resumen"""
+        metrics_count = FinancialMetric.objects.count()
+        category_summaries_count = CategorySummary.objects.count()
+        alerts_count = BudgetAlert.objects.count()
+		
+        return [
+			f"📊 Total métricas: {metrics_count}",
+			f"📂 Total resúmenes de categorías: {category_summaries_count}",
+			f"🚨 Total alertas: {alerts_count}",
+            f"\n💡 Comandos útiles:",
+            f"   python manage.py generate_metrics",
+		]

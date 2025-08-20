@@ -1,30 +1,14 @@
-from django.core.management.base import BaseCommand
+from api.core.management.base import FinTrackBaseCommand
 from api.transactions.models import Category
 
-class Command(BaseCommand):
+class Command(FinTrackBaseCommand):
     help = 'Configura categorías predeterminadas para transacciones'
-    
-    def __init__(self):
-        super().__init__()
-        self.success_count = 0
-        self.error_count = 0
-    
-    def log_success(self, message):
-        self.stdout.write(self.style.SUCCESS(f"✅ {message}"))
-        self.success_count += 1
-    
-    def log_error(self, message):
-        self.stdout.write(self.style.ERROR(f"❌ {message}"))
-        self.error_count += 1
-    
-    def log_info(self, message):
-        self.stdout.write(self.style.WARNING(f"ℹ️  {message}"))
     
     def handle(self, *args, **options):
         self.stdout.write("📂 TRANSACTIONS - Configurando categorías predeterminadas...")
         
         self.create_categories()
-        self.print_summary()
+        self.print_summary("TRANSACTIONS - CATEGORÍAS CONFIGURADAS", "transactions")
     
     def create_categories(self):
         """Crear categorías predeterminadas"""
@@ -82,22 +66,16 @@ class Command(BaseCommand):
         except Exception as e:
             self.log_error(f"Error al crear categorías: {e}")
     
-    def print_summary(self):
-        """Mostrar resumen del comando"""
-        self.stdout.write("\n" + "="*50)
-        self.stdout.write(self.style.SUCCESS("🎉 TRANSACTIONS - CATEGORÍAS CONFIGURADAS"))
-        self.stdout.write("="*50)
-        self.stdout.write(f"✅ Operaciones exitosas: {self.success_count}")
-        self.stdout.write(f"❌ Errores encontrados: {self.error_count}")
-        self.stdout.write(f"\n📊 RESUMEN DE CATEGORÍAS:")
-        
-        # Estadísticas por tipo
+    def get_summary_stats(self):
+        """Retorna estadísticas específicas del módulo para el resumen"""
         expense_count = Category.objects.filter(category_type='expense').count()
         income_count = Category.objects.filter(category_type='income').count()
         both_count = Category.objects.filter(category_type='both').count()
+        total_count = Category.objects.count()
         
-        self.stdout.write(f"💸 Gastos: {expense_count}")
-        self.stdout.write(f"💰 Ingresos: {income_count}")
-        self.stdout.write(f"🔄 Ambos: {both_count}")
-        self.stdout.write(f"📈 Total: {Category.objects.count()}")
-        self.stdout.write("="*50)
+        return [
+            f"💸 Gastos: {expense_count}",
+            f"💰 Ingresos: {income_count}", 
+            f"🔄 Ambos: {both_count}",
+            f"📈 Total: {total_count}"
+        ]

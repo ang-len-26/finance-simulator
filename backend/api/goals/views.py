@@ -471,8 +471,8 @@ class GoalTemplateViewSet(viewsets.ReadOnlyModelViewSet):
 def create_goal_templates(request):
     """Crear plantillas predeterminadas de metas"""
     try:
-        from .models import create_default_goal_templates
-        create_default_goal_templates()
+        from django.core.management import call_command
+        call_command('setup_goal_templates')
         
         total_templates = GoalTemplate.objects.count()
         

@@ -49,83 +49,58 @@ def register_user(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def create_demo_user(request):
-    """Para 'Probar demo sin registrarse' - Con variables de entorno SEGURAS"""
+    """Para 'Probar demo sin registrarse' - Usa el sistema completo de setup_demo"""
     
-    demo_prefix = os.getenv('DEMO_USER_PREFIX', 'demo_user')
-    demo_password = os.getenv('DEMO_PASSWORD', 'demo123')
-    demo_duration = int(os.getenv('DEMO_DURATION_HOURS', '24'))
-    
-    # Balances desde variables de entorno
-    bcp_balance = Decimal(os.getenv('DEMO_BCP_BALANCE', '5000.00'))
-    bbva_balance = Decimal(os.getenv('DEMO_BBVA_BALANCE', '10000.00'))
-    cash_balance = Decimal(os.getenv('DEMO_CASH_BALANCE', '500.00'))
-    
-    demo_user = User.objects.create_user(
-        username=f"{demo_prefix}_{uuid.uuid4()}",
-        password=demo_password
-    )
-    
-    # Crear perfil demo con expiración
-    UserProfile.objects.create(
-        user=demo_user,
-        is_demo=True,
-        demo_expires=timezone.now() + timedelta(hours=demo_duration)
-    )
-    
-    # Crear cuentas demo con balances desde .env
-    bcp_account = Account.objects.create(
-        user=demo_user,
-        name="Cuenta Corriente",
-        bank_name="BCP",
-        account_type="checking",
-        initial_balance=bcp_balance
-    )
-    
-    savings_account = Account.objects.create(
-        user=demo_user,
-        name="Cuenta Ahorros",
-        bank_name="BBVA",
-        account_type="savings", 
-        initial_balance=bbva_balance
-    )
-    
-    cash_account = Account.objects.create(
-        user=demo_user,
-        name="Efectivo",
-        account_type="cash",
-        initial_balance=cash_balance
-    )
-    
-    # Transacciones demo (mantener las existentes)
-    sample_transactions = [
-        {'title': 'Sueldo', 'amount': 3000, 'type': 'income', 'date': '2024-08-01', 'to_account': bcp_account},
-        {'title': 'Supermercado', 'amount': 150, 'type': 'expense', 'date': '2024-08-02', 'from_account': bcp_account},
-        {'title': 'Netflix', 'amount': 15.99, 'type': 'expense', 'date': '2024-08-03', 'from_account': bcp_account},
-        {'title': 'Transferencia a Ahorros', 'amount': 500, 'type': 'transfer', 'date': '2024-08-04', 'from_account': bcp_account, 'to_account': savings_account},
-        {'title': 'Retiro ATM', 'amount': 200, 'type': 'transfer', 'date': '2024-08-05', 'from_account': bcp_account, 'to_account': cash_account},
-        {'title': 'Inversión', 'amount': 1000, 'type': 'investment', 'date': '2024-08-06', 'from_account': savings_account},
-        {'title': 'Pago servicios', 'amount': 100, 'type': 'expense', 'date': '2024-08-07', 'from_account': bcp_account},
-        {'title': 'Freelance', 'amount': 800, 'type': 'income', 'date': '2024-08-08', 'to_account': bcp_account},
-        {'title': 'Restaurante', 'amount': 60, 'type': 'expense', 'date': '2024-08-09', 'from_account': cash_account},
-        {'title': 'Gasolina', 'amount': 35, 'type': 'expense', 'date': '2024-08-10', 'from_account': bcp_account},
-    ]
-    
-    for trans_data in sample_transactions:
-        Transaction.objects.create(**trans_data, user=demo_user)
-    
-    # Actualizar balances
-    bcp_account.update_balance()
-    savings_account.update_balance()
-    cash_account.update_balance()
-    
-    # Retornar tokens para acceso inmediato
-    refresh = RefreshToken.for_user(demo_user)
-    return Response({
-        'access': str(refresh.access_token),
-        'refresh': str(refresh),
-        'demo_user': True,
-        'expires_at': UserProfile.objects.get(user=demo_user).demo_expires
-    })
+    try:
+        # Generar username único para demos temporales
+        demo_prefix = os.getenv('DEMO_USERNAME', 'demo_temp')
+        unique_username = f"{demo_prefix}_{uuid.uuid4()}"
+        
+        # Crear usuario temporal
+        demo_user = User.objects.create_user(
+            username=unique_username,
+            password='demo123',
+            email=f"{unique_username}@demo.fintrack.com"
+        )
+        
+        # Crear perfil demo con expiración
+        demo_duration = int(os.getenv('DEMO_DURATION_HOURS', '24'))
+        UserProfile.objects.create(
+            user=demo_user,
+            is_demo=True,
+            demo_expires=timezone.now() + timedelta(hours=demo_duration)
+        )
+        
+        # AQUÍ USAR EL SISTEMA EXISTENTE:
+        # Importar y usar la lógica de setup_demo
+        from api.core.management.commands.setup_demo import Command as SetupDemoCommand
+        demo_command = SetupDemoCommand()
+        demo_command.demo_user = demo_user  # Usar el usuario recién creado
+        
+        # Crear los datos demo completos
+        demo_command.create_demo_accounts()
+        demo_command.create_demo_transactions()
+        demo_command.create_demo_goals()
+        demo_command.update_account_balances()
+        
+        # Retornar tokens para acceso inmediato
+        refresh = RefreshToken.for_user(demo_user)
+        
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'demo_user': True,
+            'username': unique_username,
+            'expires_at': UserProfile.objects.get(user=demo_user).demo_expires,
+            'accounts_created': Account.objects.filter(user=demo_user).count(),
+            'transactions_created': Transaction.objects.filter(user=demo_user).count()
+        })
+        
+    except Exception as e:
+        return Response(
+            {'error': f'Error creando usuario demo: {str(e)}'}, 
+            status=500
+        )
 
 @api_view(["POST"])
 def create_superuser(request):
