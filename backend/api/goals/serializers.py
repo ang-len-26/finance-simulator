@@ -41,9 +41,54 @@ class GoalContributionSerializer(serializers.ModelSerializer):
         return value
     
     def validate_from_account(self, value):
-        if value.user != self.context['request'].user:
+        request = self.context.get('request')
+        if request and value.user != request.user:
             raise serializers.ValidationError("La cuenta no te pertenece.")
         return value
+    
+    def validate_date(self, value):
+        """Asegurar que date sea un objeto date, no datetime"""
+        from datetime import datetime, date
+        
+        if isinstance(value, datetime):
+            return value.date()  # Convertir datetime a date
+        elif isinstance(value, date):
+            return value  # Ya es date, devolver tal como está
+        else:
+            # Si es string, intentar parsear
+            if isinstance(value, str):
+                try:
+                    parsed_datetime = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                    return parsed_datetime.date()
+                except:
+                    pass
+            
+            raise serializers.ValidationError("Formato de fecha inválido")
+
+    def validate(self, data):
+        """Validación cruzada mejorada"""
+        amount = data.get('amount')
+        from_account = data.get('from_account')
+        
+        # Verificar fondos suficientes
+        if from_account and amount:
+            if from_account.current_balance < amount:
+                raise serializers.ValidationError({
+                    'amount': f'Fondos insuficientes. Balance disponible: ${from_account.current_balance}'
+                })
+        
+        return data
+    
+    def save(self, **kwargs):
+        """Guardar contribución con actualización automática de cuenta"""
+        contribution = super().save(**kwargs)
+        
+        # Actualizar balance de cuenta (restar el monto)
+        if contribution.from_account:
+            contribution.from_account.current_balance -= contribution.amount
+            contribution.from_account.save(update_fields=['current_balance'])
+        
+        return contribution
 
 # =====================================================
 # SERIALIZERS PARA METAS FINANCIERAS
@@ -119,13 +164,23 @@ class FinancialGoalSerializer(serializers.ModelSerializer):
         return value
     
     def validate(self, data):
-        # Validar que start_date sea anterior a target_date
+        """Validación cruzada mejorada"""
+        # Obtener fechas
         start_date = data.get('start_date')
         target_date = data.get('target_date')
         
-        if start_date and target_date and start_date >= target_date:
-            raise serializers.ValidationError("La fecha de inicio debe ser anterior a la fecha objetivo.")
+        # Si no hay start_date, usar la fecha actual
+        if not start_date:
+            from django.utils import timezone
+            start_date = timezone.now().date()
+            data['start_date'] = start_date
         
+        # Validar que start_date sea anterior o igual a target_date
+        if start_date and target_date and start_date > target_date:
+            raise serializers.ValidationError(
+                "La fecha de inicio debe ser anterior o igual a la fecha objetivo."
+            )
+    
         return data
 
 # =====================================================

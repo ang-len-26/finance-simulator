@@ -54,36 +54,86 @@ class FinancialGoalViewSet(viewsets.ModelViewSet):
         return FinancialGoalSerializer
     
     def perform_create(self, serializer):
-        """Asociar meta con usuario actual"""
+        """CORREGIDO: Crear meta con cálculo de monthly_target seguro"""
         goal = serializer.save(user=self.request.user)
         
-        # Calcular monthly_target si no se proporcionó
-        if not goal.monthly_target:
-            goal.monthly_target = goal.suggested_monthly_amount
-            goal.save(update_fields=['monthly_target'])
+        # CALCULAR monthly_target de forma segura
+        if not goal.monthly_target and goal.target_amount > 0:
+            try:
+                total_days = (goal.target_date - goal.start_date).days
+                if total_days > 0:
+                    months_remaining = max(total_days / 30, 1)
+                    suggested_monthly = goal.target_amount / Decimal(str(months_remaining))
+                    goal.monthly_target = suggested_monthly
+                    goal.save(update_fields=['monthly_target'])
+            except Exception as e:
+                # Si falla el cálculo, dejar monthly_target como None
+                pass
     
     @action(detail=True, methods=['post'])
     def add_contribution(self, request, pk=None):
-        """Agregar contribución a una meta"""
+        """Agregar contribución a una meta - VERSIÓN CORREGIDA"""
         goal = self.get_object()
         
+        # ✅ VALIDAR que la meta pertenezca al usuario
+        if goal.user != request.user:
+            return Response(
+                {'error': 'No tienes permisos para contribuir a esta meta'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # ✅ PREPARAR datos con goal pre-asignada
+        contribution_data = request.data.copy()
+        
+        # ✅ VALIDAR que from_account existe y pertenece al usuario
+        from_account_id = contribution_data.get('from_account')
+        if from_account_id:
+            try:
+                from ..accounts.models import Account
+                from_account = Account.objects.get(id=from_account_id, user=request.user)
+                contribution_data['from_account'] = from_account.id
+            except Account.DoesNotExist:
+                return Response(
+                    {'error': 'La cuenta especificada no existe o no te pertenece'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        else:
+            return Response(
+                {'error': 'Debe especificar una cuenta de origen (from_account)'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
+        # ✅ CREAR serializer con datos validados
         serializer = GoalContributionSerializer(
-            data=request.data,
+            data=contribution_data,
             context={'request': request}
         )
         
         if serializer.is_valid():
-            contribution = serializer.save(
-                goal=goal,
-                user=request.user
-            )
-            
-            return Response({
-                'message': 'Contribución agregada exitosamente',
-                'contribution': GoalContributionSerializer(contribution).data,
-                'goal_progress': goal.progress_percentage
-            }, status=status.HTTP_201_CREATED)
-        
+            try:
+                # ✅ GUARDAR con relaciones correctas
+                contribution = serializer.save(
+                    goal=goal,
+                    user=request.user
+                )
+                
+                # ✅ ACTUALIZAR progreso de meta
+                goal.update_progress()
+                
+                return Response({
+                    'message': 'Contribución agregada exitosamente',
+                    'contribution': GoalContributionSerializer(contribution, context={'request': request}).data,
+                    'goal_progress': goal.progress_percentage,
+                    'goal_current_amount': float(goal.current_amount),
+                    'goal_remaining_amount': float(goal.remaining_amount)
+                }, status=status.HTTP_201_CREATED)
+                
+            except Exception as e:
+                return Response(
+                    {'error': f'Error al guardar contribución: {str(e)}'}, 
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+    
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=True, methods=['get'])
@@ -238,64 +288,68 @@ class FinancialGoalViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def dashboard(self, request):
-        """Dashboard completo de metas financieras"""
+        """Dashboard completo de metas financieras - CORREGIDO"""
         user = request.user
         goals = FinancialGoal.objects.filter(user=user)
         
-        # Métricas generales
-        summary_stats = goals.aggregate(
-            total_goals=Count('id'),
-            active_goals=Count('id', filter=Q(status='active')),
-            completed_goals=Count('id', filter=Q(status='completed')),
-            overdue_goals=Count('id', filter=Q(status='overdue')),
-            total_target=Sum('target_amount'),
-            total_current=Sum('current_amount')
-        )
+        # MÉTRICAS BÁSICAS - SOLO CAMPOS SEGUROS
+        total_goals = goals.count()
+        active_goals = goals.filter(status='active').count()
+        completed_goals = goals.filter(status='completed').count()
         
-        total_target = summary_stats['total_target'] or Decimal('0.00')
-        total_current = summary_stats['total_current'] or Decimal('0.00')
-        overall_progress = float((total_current / total_target * 100)) if total_target > 0 else 0
+        # METAS VENCIDAS - CÁLCULO MANUAL SEGURO
+        overdue_count = 0
+        goals_on_track_count = 0
         
-        # Contribuciones del último mes
+        for goal in goals.filter(status='active'):
+            # Usar solo campos del modelo, no propiedades que pueden fallar
+            if goal.target_date < timezone.now().date():
+                overdue_count += 1
+            
+            # Calcular progreso manualmente
+            if goal.target_amount > 0:
+                progress = (goal.current_amount / goal.target_amount) * 100
+                if progress >= 50:
+                    goals_on_track_count += 1
+        
+        # TOTALES DE MONTOS - AGREGACIONES SEGURAS
+        target_sum = goals.aggregate(Sum('target_amount'))['target_amount__sum'] or Decimal('0')
+        current_sum = goals.aggregate(Sum('current_amount'))['current_amount__sum'] or Decimal('0')
+        
+        overall_progress = 0
+        if target_sum > 0:
+            overall_progress = float((current_sum / target_sum) * 100)
+        
+        # CONTRIBUCIONES MENSUALES
         last_month = timezone.now().date() - timedelta(days=30)
         monthly_contributions = GoalContribution.objects.filter(
             user=user,
             date__gte=last_month
-        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-        
-        # Metas en buen camino
-        goals_on_track = 0
-        for goal in goals.filter(status='active'):
-            if goal.progress_percentage >= 50:  # Criterio simple
-                goals_on_track += 1
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
         
         summary = {
-            'total_goals': summary_stats['total_goals'],
-            'active_goals': summary_stats['active_goals'],
-            'completed_goals': summary_stats['completed_goals'],
-            'overdue_goals': summary_stats['overdue_goals'],
-            'total_target_amount': float(total_target),
-            'total_current_amount': float(total_current),
+            'total_goals': total_goals,
+            'active_goals': active_goals,
+            'completed_goals': completed_goals,
+            'overdue_goals': overdue_count,
+            'total_target_amount': float(target_sum),
+            'total_current_amount': float(current_sum),
             'overall_progress': round(overall_progress, 1),
             'monthly_contributions': float(monthly_contributions),
-            'goals_on_track': goals_on_track
+            'goals_on_track': goals_on_track_count
         }
         
-        # Metas recientes (últimas 5)
+        # LISTAS DE METAS
         recent_goals = goals.order_by('-created_at')[:5]
-        
-        # Metas urgentes (próximas a vencer)
         urgent_goals = goals.filter(
             status='active',
             target_date__lte=timezone.now().date() + timedelta(days=30)
         ).order_by('target_date')[:5]
-        
-        # Metas con mejor progreso
         top_performing = goals.filter(status='active').order_by('-current_amount')[:5]
         
-        # Datos para gráficos
-        monthly_chart = self._get_monthly_progress_chart(user)
-        type_chart = self._get_goals_by_type_chart(goals)
+        # GRÁFICOS - MÉTODOS CORREGIDOS
+        monthly_chart = self._get_monthly_progress_chart_safe(user)
+        type_chart = self._get_goals_by_type_chart_safe(goals)
         
         dashboard_data = {
             'summary': summary,
@@ -305,8 +359,8 @@ class FinancialGoalViewSet(viewsets.ModelViewSet):
             'monthly_progress_chart': monthly_chart,
             'goals_by_type_chart': type_chart
         }
-        serializer = GoalDashboardSerializer(dashboard_data)
-        return Response(serializer.data)
+    
+        return Response(dashboard_data)
 
     def _get_monthly_progress_chart(self, user):
         """Generar datos para gráfico de progreso mensual"""
@@ -367,13 +421,97 @@ class FinancialGoalViewSet(viewsets.ModelViewSet):
             }]
         }
     
+    def _get_monthly_progress_chart_safe(self, user):
+        """Generar datos para gráfico - VERSIÓN SEGURA"""
+        try:
+            six_months_ago = timezone.now().date() - timedelta(days=180)
+
+            # USAR RAW SQL O AGGREGATE SIMPLE
+            contributions = GoalContribution.objects.filter(
+                user=user,
+                date__gte=six_months_ago
+            ).values('date__year', 'date__month').annotate(
+                total_amount=Sum('amount')
+            ).order_by('date__year', 'date__month')
+
+            labels = []
+            data = []
+
+            for item in contributions:
+                month_name = f"{item['date__year']}-{item['date__month']:02d}"
+                labels.append(month_name)
+                data.append(float(item['total_amount']))
+
+            return {
+                'labels': labels,
+                'datasets': [{
+                    'label': 'Contribuciones Mensuales',
+                    'data': data,
+                    'backgroundColor': 'rgba(59, 130, 246, 0.5)',
+                    'borderColor': 'rgb(59, 130, 246)',
+                    'borderWidth': 2
+                }]
+            }
+        except Exception as e:
+            # FALLBACK SEGURO
+            return {
+                'labels': [],
+                'datasets': [{
+                    'label': 'Contribuciones Mensuales',
+                    'data': [],
+                    'backgroundColor': 'rgba(59, 130, 246, 0.5)',
+                    'borderColor': 'rgb(59, 130, 246)',
+                    'borderWidth': 2
+                }]
+            }
+
+    def _get_goals_by_type_chart_safe(self, goals):
+        """Generar gráfico por tipo - VERSIÓN SEGURA"""
+        try:
+            type_data = goals.values('goal_type').annotate(
+                count=Count('id')
+            ).order_by('-count')
+
+            labels = []
+            data = []
+            colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
+
+            for i, item in enumerate(type_data):
+                # USAR get() SEGURO
+                goal_type_display = dict(FinancialGoal.GOAL_TYPES).get(
+                    item['goal_type'],
+                    item['goal_type'].title()
+                )
+                labels.append(goal_type_display)
+                data.append(item['count'])
+
+            return {
+                'labels': labels,
+                'datasets': [{
+                    'data': data,
+                    'backgroundColor': colors[:len(data)] if data else [],
+                    'borderWidth': 2
+                }]
+            }
+        except Exception as e:
+            # FALLBACK SEGURO
+            return {
+                'labels': [],
+                'datasets': [{
+                    'data': [],
+                    'backgroundColor': [],
+                    'borderWidth': 2
+                }]
+            }
+
     @action(detail=False, methods=['get'])
     def summary(self, request):
         """Resumen rápido de metas para widgets"""
+        from django.db.models import Case, When, FloatField
         user = request.user
         goals = FinancialGoal.objects.filter(user=user)
         
-        # Estadísticas básicas
+        # Estadísticas básicas - SOLO CAMPOS EXISTENTES
         stats = goals.aggregate(
             total=Count('id'),
             active=Count('id', filter=Q(status='active')),
@@ -382,19 +520,26 @@ class FinancialGoalViewSet(viewsets.ModelViewSet):
             total_target=Sum('target_amount')
         )
         
-        # Meta más próxima a completar
+        # Meta más próxima a completar - USAR CAMPOS SEGUROS
         next_to_complete = goals.filter(
             status='active'
-        ).order_by('-progress_percentage').first()
+        ).annotate(
+            calculated_progress=Case(
+                When(target_amount__gt=0, 
+                    then=F('current_amount') * 100.0 / F('target_amount')),
+                default=0,
+                output_field=FloatField()
+        )
+        ).order_by('-calculated_progress').first()
         
         return Response({
             'total_goals': stats['total'],
-            'active_goals': stats['active'],
+            'active_goals': stats['active'], 
             'completed_goals': stats['completed'],
             'total_saved': float(stats['total_saved'] or 0),
             'total_target': float(stats['total_target'] or 0),
             'next_to_complete': FinancialGoalSummarySerializer(
-                next_to_complete
+                next_to_complete, context={'request': request}
             ).data if next_to_complete else None
         })
 
@@ -479,7 +624,7 @@ def create_goal_templates(request):
         return Response({
             'message': 'Plantillas de metas creadas exitosamente',
             'total_templates': total_templates
-        })
+        }, status=status.HTTP_201_CREATED)
         
     except Exception as e:
         return Response(

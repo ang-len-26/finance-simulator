@@ -97,7 +97,7 @@ class ReportsViewSet(viewsets.ViewSet):
             }
         })
     
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post'], url_path='mark-alert-read')
     def mark_alert_read(self, request):
         """Marcar alertas como leídas"""
         alert_ids = request.data.get('alert_ids', [])
@@ -118,7 +118,7 @@ class ReportsViewSet(viewsets.ViewSet):
             'updated_count': updated
         })
     
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], url_path='category-trends')
     def category_trends(self, request):
         """Tendencias de categorías a lo largo del tiempo"""
         user = request.user
@@ -232,7 +232,7 @@ class ReportsViewSet(viewsets.ViewSet):
             }
         })
     
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], url_path='income-vs-expenses')
     def income_vs_expenses(self, request):
         """Datos para gráfico Ingresos vs Gastos mensuales"""
         user = request.user
@@ -301,7 +301,7 @@ class ReportsViewSet(viewsets.ViewSet):
             }
         })
     
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], url_path='balance-timeline')
     def balance_timeline(self, request):
         """Balance acumulado en el tiempo - Para gráfico de línea"""
         user = request.user
@@ -382,8 +382,8 @@ class ReportsViewSet(viewsets.ViewSet):
                 'lowest_balance': min(balance_data) if balance_data else 0
             }
         })
-    
-    @action(detail=False, methods=['get'])
+
+    @action(detail=False, methods=['get'], url_path='category-distribution')
     def category_distribution(self, request):
         """Distribución de gastos por categoría - Para gráfico de dona/barras"""
         user = request.user
@@ -470,7 +470,7 @@ class ReportsViewSet(viewsets.ViewSet):
             }
         })
     
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], url_path='top-categories')
     def top_categories(self, request):
         """Top 5 categorías de gastos con detalles"""
         user = request.user
@@ -536,7 +536,7 @@ class ReportsViewSet(viewsets.ViewSet):
             }
         })
     
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], url_path='recent-transactions')
     def recent_transactions(self, request):
         """Transacciones recientes con iconos y detalles"""
         user = request.user
@@ -581,9 +581,9 @@ class ReportsViewSet(viewsets.ViewSet):
             'total_count': Transaction.objects.filter(user=user).count()
         })
     
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], url_path='financial-metrics')
     def financial_metrics(self, request):
-        """Métricas financieras precalculadas por período"""
+        """Métricas financieras precalculadas por período - VERSIÓN COMPLETA"""
         user = request.user
     
         # Parámetros
@@ -596,11 +596,21 @@ class ReportsViewSet(viewsets.ViewSet):
             period_type=period_type
         ).order_by('-period_start')[:limit]
     
-        # Si no hay métricas, calcular automáticamente
+        # Si no hay métricas, generar automáticamente
         if not metrics.exists():
-            # Crear métricas para los últimos períodos
-            metrics = self._generate_financial_metrics(user, period_type, limit)
-    
+            try:
+                # Intentar generar métricas automáticamente
+                metrics = self._generate_financial_metrics(user, period_type, limit)
+            except Exception as e:
+                # Si falla la generación, devolver respuesta informativa
+                return Response({
+                    'metrics': [],
+                    'period_type': period_type,
+                    'total_periods': 0,
+                    'message': f'No hay métricas precalculadas. Ejecute: python manage.py generate_metrics',
+                    'suggestion': 'Use otros endpoints como /reports/metrics/ para datos en tiempo real'
+                })
+
         serializer = FinancialMetricSerializer(metrics, many=True)
         return Response({
             'metrics': serializer.data,
@@ -650,9 +660,12 @@ def reports_overview(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def financial_ratios(request):
-    """Ratios financieros profesionales"""
+    """Ratios financieros profesionales - CORREGIDO ERROR 500"""
     user = request.user
-    start_date, end_date, period = ReportsViewSet()._get_date_range(ReportsViewSet(), request)
+    
+    reports_viewset = ReportsViewSet()
+    reports_viewset.request = request
+    start_date, end_date, period = reports_viewset._get_date_range(request)
     
     transactions = Transaction.objects.filter(
         user=user,

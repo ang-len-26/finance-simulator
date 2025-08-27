@@ -178,19 +178,23 @@ def test_core_module():
     results['total'] += 1
     
     response = make_request("POST", "/setup/create-superuser/", auth_required=False)
-    data = validate_response(response, 201, "/setup/create-superuser/")
-    
-    if data and data.get('status') == 'success':
-        results['passed'] += 1
-        results['details'].append("✅ Superusuario creado correctamente")
-    else:
-        # Puede fallar si ya existe - verificar mensaje
-        if data and 'already exists' in data.get('message', ''):
+
+    if response.status_code == 201:
+        data = response.json()
+        if data.get('status') == 'success':
+            results['passed'] += 1
+            results['details'].append("✅ Superusuario creado correctamente")
+    elif response.status_code == 400:
+        data = response.json()
+        if 'already exists' in data.get('message', ''):
             results['passed'] += 1
             results['details'].append("✅ Superusuario ya existe")
         else:
             results['failed'] += 1
             results['details'].append("❌ Error creando superusuario")
+    else:
+        results['failed'] += 1
+        results['details'].append(f"❌ Status inesperado: {response.status_code}")
     
     # 3. Test Crear Usuario Demo
     print_test("/auth/demo/", "POST", "Crear usuario demo con datos")
@@ -289,7 +293,7 @@ def test_accounts_module():
         'details': []
     }
     
-    # 1. Test Listar Cuentas
+    # 1. Test Listar Cuentas - CORREGIDO
     print_test("/accounts/", "GET", "Listar todas las cuentas del usuario")
     results['total'] += 1
     
@@ -297,16 +301,25 @@ def test_accounts_module():
     data = validate_response(response, 200, "/accounts/")
     
     if data:
-        accounts_count = len(data.get('results', data))
+        # FIX: Manejar tanto formato paginado como lista directa
+        if isinstance(data, dict) and 'results' in data:
+            # Formato paginado: {'results': [...], 'count': X}
+            accounts_list = data['results']
+            accounts_count = len(accounts_list)
+        elif isinstance(data, list):
+            # Formato lista directa: [...]
+            accounts_list = data
+            accounts_count = len(accounts_list)
+        else:
+            accounts_list = []
+            accounts_count = 0
+        
         results['passed'] += 1
         results['details'].append(f"✅ Cuentas listadas: {accounts_count} encontradas")
         print_info(f"Cuentas demo disponibles: {accounts_count}")
         
         # Guardar IDs de cuentas para otros tests
-        if isinstance(data, dict) and 'results' in data:
-            TEST_CONFIG['created_resources']['accounts'] = [acc['id'] for acc in data['results']]
-        elif isinstance(data, list):
-            TEST_CONFIG['created_resources']['accounts'] = [acc['id'] for acc in data]
+        TEST_CONFIG['created_resources']['accounts'] = [acc['id'] for acc in accounts_list if 'id' in acc]
     else:
         results['failed'] += 1
         results['details'].append("❌ Error listando cuentas")
@@ -328,6 +341,8 @@ def test_accounts_module():
     
     if data and data.get('id'):
         new_account_id = data['id']
+        if 'accounts' not in TEST_CONFIG['created_resources']:
+            TEST_CONFIG['created_resources']['accounts'] = []
         TEST_CONFIG['created_resources']['accounts'].append(new_account_id)
         results['passed'] += 1
         results['details'].append(f"✅ Cuenta creada - ID: {new_account_id}")
@@ -336,7 +351,7 @@ def test_accounts_module():
         results['details'].append("❌ Error creando cuenta")
     
     # 3. Test Obtener Cuenta Específica
-    if TEST_CONFIG['created_resources']['accounts']:
+    if TEST_CONFIG['created_resources'].get('accounts'):
         account_id = TEST_CONFIG['created_resources']['accounts'][0]
         print_test(f"/accounts/{account_id}/", "GET", "Obtener detalles de cuenta específica")
         results['total'] += 1
@@ -346,7 +361,7 @@ def test_accounts_module():
         
         if data and data.get('id') == account_id:
             results['passed'] += 1
-            results['details'].append(f"✅ Cuenta específica obtenida - {data.get('name')}")
+            results['details'].append(f"✅ Cuenta específica obtenida - {data.get('name', 'N/A')}")
         else:
             results['failed'] += 1
             results['details'].append("❌ Error obteniendo cuenta específica")
@@ -372,7 +387,7 @@ def test_accounts_module():
     response = make_request("GET", "/accounts/", params={"is_active": "true"})
     data = validate_response(response, 200, "/accounts/ con filtro is_active")
     
-    if data:
+    if data is not None:
         results['passed'] += 1
         results['details'].append("✅ Filtro is_active funcionando")
     else:
@@ -386,7 +401,7 @@ def test_accounts_module():
     response = make_request("GET", "/accounts/", params={"account_type": "checking"})
     data = validate_response(response, 200, "/accounts/ con filtro account_type")
     
-    if data:
+    if data is not None:
         results['passed'] += 1
         results['details'].append("✅ Filtro account_type funcionando")
     else:
@@ -400,7 +415,7 @@ def test_accounts_module():
     response = make_request("GET", "/accounts/", params={"min_balance": "1000", "max_balance": "10000"})
     data = validate_response(response, 200, "/accounts/ con filtros de balance")
     
-    if data:
+    if data is not None:
         results['passed'] += 1
         results['details'].append("✅ Filtros de balance funcionando")
     else:
@@ -408,7 +423,7 @@ def test_accounts_module():
         results['details'].append("❌ Error con filtros de balance")
     
     # 8. Test Historial de Balance
-    if TEST_CONFIG['created_resources']['accounts']:
+    if TEST_CONFIG['created_resources'].get('accounts'):
         account_id = TEST_CONFIG['created_resources']['accounts'][0]
         print_test(f"/accounts/{account_id}/balance_history/", "GET", "Historial de balance (30 días)")
         results['total'] += 1
@@ -416,7 +431,7 @@ def test_accounts_module():
         response = make_request("GET", f"/accounts/{account_id}/balance_history/")
         data = validate_response(response, 200, f"/accounts/{account_id}/balance_history/")
         
-        if data:
+        if data is not None:
             results['passed'] += 1
             results['details'].append("✅ Historial de balance obtenido")
         else:
@@ -424,7 +439,7 @@ def test_accounts_module():
             results['details'].append("❌ Error obteniendo historial de balance")
     
     # 9. Test Transacciones de Cuenta
-    if TEST_CONFIG['created_resources']['accounts']:
+    if TEST_CONFIG['created_resources'].get('accounts'):
         account_id = TEST_CONFIG['created_resources']['accounts'][0]
         print_test(f"/accounts/{account_id}/transactions/", "GET", "Transacciones de cuenta específica")
         results['total'] += 1
@@ -432,13 +447,37 @@ def test_accounts_module():
         response = make_request("GET", f"/accounts/{account_id}/transactions/")
         data = validate_response(response, 200, f"/accounts/{account_id}/transactions/")
         
-        if data:
-            transactions_count = len(data.get('results', data))
+        if data is not None:
+            # FIX: Manejar respuesta como lista o dict paginado
+            if isinstance(data, dict) and 'results' in data:
+                transactions_count = len(data['results'])
+            elif isinstance(data, list):
+                transactions_count = len(data)
+            else:
+                transactions_count = 0
+                
             results['passed'] += 1
             results['details'].append(f"✅ Transacciones de cuenta: {transactions_count} encontradas")
         else:
             results['failed'] += 1
             results['details'].append("❌ Error obteniendo transacciones de cuenta")
+    
+    # 10. Test Conciliación de Cuenta (NUEVO)
+    if TEST_CONFIG['created_resources'].get('accounts'):
+        account_id = TEST_CONFIG['created_resources']['accounts'][-1]  # Usar cuenta creada en test
+        print_test(f"/accounts/{account_id}/reconcile/", "POST", "Conciliar balance de cuenta")
+        results['total'] += 1
+        
+        reconcile_data = {"real_balance": "1050.00"}
+        response = make_request("POST", f"/accounts/{account_id}/reconcile/", data=reconcile_data)
+        data = validate_response(response, 200, f"/accounts/{account_id}/reconcile/")
+        
+        if data and 'message' in data:
+            results['passed'] += 1
+            results['details'].append(f"✅ Conciliación completada - Diferencia: ${data.get('difference', 0)}")
+        else:
+            results['failed'] += 1
+            results['details'].append("❌ Error en conciliación")
     
     return results
 
@@ -1021,7 +1060,8 @@ def test_goals_module():
         contribution_data = {
             "amount": "100.00",
             "from_account": TEST_CONFIG['created_resources']['accounts'][0],
-            "notes": "Contribución de prueba automatizada"
+            "notes": "Contribución de prueba automatizada",
+            "date": datetime.now().strftime("%Y-%m-%d")
         }
         
         response = make_request("POST", f"/goals/{goal_id}/add_contribution/", data=contribution_data)

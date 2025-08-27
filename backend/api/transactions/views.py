@@ -163,7 +163,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
                 'start_date': start_date,
                 'end_date': end_date
             },
-            'summary': {
+            'metrics': {
                 'total_income': float(total_income),
                 'total_expenses': float(total_expenses),
                 'total_investments': float(summary['total_investments'] or 0),
@@ -437,7 +437,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
             return Response({
                 'message': 'Categorías predeterminadas creadas exitosamente',
                 'total_categories': total_categories
-            })
+            }, status=status.HTTP_201_CREATED)
         except Exception as e:
             return Response(
                 {'error': f'Error al crear categorías: {str(e)}'},
@@ -577,5 +577,10 @@ class BudgetAlertViewSet(viewsets.ReadOnlyModelViewSet):
         """Solo alertas no leídas"""
         alerts = self.get_queryset().filter(is_read=False)
         serializer = self.get_serializer(alerts, many=True)
-        return Response(serializer.data)
+        
+        return Response({
+            'unread_alerts': serializer.data,
+            'count': alerts.count(),
+            'message': 'No hay alertas sin leer' if not alerts.exists() else f'{alerts.count()} alertas sin leer encontradas'
+        })
 
