@@ -1,68 +1,210 @@
 import { PaginationParams } from "@/types/api.types";
 
-// Basado en accounts/serializers.py
-export type AccountType = 'checking' | 'savings' | 'credit' | 'investment' | 'cash';
+// =====================================================
+// ACCOUNT TYPES - Basado en accounts/models.py y serializers.py
+// =====================================================
+
+// Tipos de cuenta (DEBE coincidir con Account.ACCOUNT_TYPES en models.py)
+export type AccountType = 
+  | 'checking'        // Cuenta Corriente
+  | 'savings'         // Cuenta Ahorros  
+  | 'investment'      // Cuenta Inversión
+  | 'credit'          // Tarjeta Crédito
+  | 'cash'            // Efectivo
+  | 'digital_wallet'  // Billetera Digital
+  | 'business'        // Cuenta Empresarial
+  | 'other';          // Otros
+
+// Monedas válidas (debe coincidir con validate_currency en serializers.py)
 export type Currency = 'PEN' | 'USD' | 'EUR';
 
+// =====================================================
+// ACCOUNT INTERFACES
+// =====================================================
+
+// Account completa (basada en AccountSerializer)
 export interface Account {
   id: number;
   name: string;
   bank_name: string;
   account_number: string;
   account_type: AccountType;
-  initial_balance: string;
-  current_balance: string;
+  initial_balance: string;      // Decimal como string
+  current_balance: string;      // Decimal como string (read-only)
   currency: Currency;
   is_active: boolean;
   include_in_reports: boolean;
-  transaction_count: number;
-  last_transaction_date: string | null;
-  monthly_income: number;
-  monthly_expenses: number;
-  created_at: string;
-  updated_at: string;
+  transaction_count: number;    // SerializerMethodField
+  last_transaction_date: string | null; // SerializerMethodField
+  monthly_income: number;       // SerializerMethodField (float)
+  monthly_expenses: number;     // SerializerMethodField (float)
+  created_at: string;          // ISO datetime
+  updated_at: string;          // ISO datetime
 }
 
+// Account ligera para listados (basada en AccountSummarySerializer)
 export interface AccountSummary {
-  total_balance: string;
-  checking_balance: string;
-  savings_balance: string;
-  credit_balance: string;
-  investment_balance: string;
-  cash_balance: string;
-  total_accounts: number;
-  active_accounts: number;
-  monthly_income: string;
-  monthly_expenses: string;
-  net_worth: string;
-}
-
-export interface CreateAccountData {
+  id: number;
   name: string;
   bank_name: string;
-  account_number: string;
   account_type: AccountType;
-  initial_balance: string;
+  current_balance: string;
   currency: Currency;
+  is_active: boolean;
+}
+
+// =====================================================
+// REQUEST/RESPONSE TYPES
+// =====================================================
+
+// Datos para crear cuenta
+export interface CreateAccountData {
+  name: string;
+  bank_name?: string;           // Optional en el modelo
+  account_number?: string;      // Optional en el modelo
+  account_type: AccountType;
+  initial_balance: string;      // Decimal como string
+  currency: Currency;
+  is_active?: boolean;         // Default true
+  include_in_reports?: boolean; // Default true
+}
+
+// Datos para actualizar cuenta
+export interface UpdateAccountData extends Partial<CreateAccountData> {}
+
+// Respuesta del endpoint /accounts/summary/ (basada en views.py)
+export interface AccountsSummaryResponse {
+  total_balance: number;
+  total_accounts: number;
+  balance_by_type: Record<AccountType, number>;
+  most_used_accounts: Array<{
+    id: number;
+    name: string;
+    bank_name: string;
+    account_type: AccountType;
+    transaction_count: number;
+    balance: number;
+  }>;
+}
+
+// Punto de historial de balance (basado en balance_history action)
+export interface BalanceHistoryPoint {
+  date: string;    // YYYY-MM-DD format
+  balance: number; // float
+}
+
+// Datos para conciliación (basado en reconcile action)
+export interface ReconcileAccountData {
+  real_balance: string; // Decimal como string
+}
+
+// Respuesta de conciliación
+export interface ReconcileResponse {
+  message: string;
+  difference: number;
+  new_balance: number;
+}
+
+// =====================================================
+// FILTER TYPES
+// =====================================================
+
+// Filtros de cuentas (basado en AccountFilter en filters.py)
+export interface AccountFilters extends PaginationParams {
+  // Filtros de texto
+  name?: string;               // icontains
+  bank_name?: string;          // icontains
+  
+  // Filtros de selección
+  account_type?: AccountType | AccountType[];  // Puede ser múltiple
+  currency?: Currency;         // iexact
+  
+  // Filtros numéricos
+  min_balance?: number;        // gte
+  max_balance?: number;        // lte
+  
+  // Filtros booleanos
   is_active?: boolean;
   include_in_reports?: boolean;
+  has_transactions?: boolean;  // Custom filter
 }
 
-export interface AccountFilters extends PaginationParams {
-  is_active?: boolean;
-  account_type?: AccountType;
-  currency?: Currency;
-  min_balance?: number;
-  max_balance?: number;
-  search?: string;
+// =====================================================
+// UI HELPER TYPES
+// =====================================================
+
+// Opciones para select de tipo de cuenta
+export interface AccountTypeOption {
+  value: AccountType;
+  label: string;
+  icon?: string;
 }
 
-export interface BalanceHistoryPoint {
-  date: string;
-  balance: number;
+// Opciones para select de moneda
+export interface CurrencyOption {
+  value: Currency;
+  label: string;
+  symbol: string;
 }
 
-export interface ReconcileAccountData {
-  actual_balance: string;
-  notes?: string;
+// Estado de cuenta para UI
+export interface AccountUIState {
+  isLoading: boolean;
+  isUpdating: boolean;
+  hasError: boolean;
+  errorMessage?: string;
+}
+
+// =====================================================
+// CONSTANTS
+// =====================================================
+
+// Etiquetas para tipos de cuenta (para UI)
+export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
+  checking: 'Cuenta Corriente',
+  savings: 'Cuenta Ahorros',
+  investment: 'Cuenta Inversión', 
+  credit: 'Tarjeta Crédito',
+  cash: 'Efectivo',
+  digital_wallet: 'Billetera Digital',
+  business: 'Cuenta Empresarial',
+  other: 'Otros'
+};
+
+// Etiquetas para monedas
+export const CURRENCY_LABELS: Record<Currency, { label: string; symbol: string }> = {
+  PEN: { label: 'Soles Peruanos', symbol: 'S/' },
+  USD: { label: 'Dólares', symbol: '$' },
+  EUR: { label: 'Euros', symbol: '€' }
+};
+
+// =====================================================
+// VALIDATION TYPES
+// =====================================================
+
+// Reglas de validación para cuenta
+export interface AccountValidationRules {
+  name: {
+    required: boolean;
+    minLength: number;
+    maxLength: number;
+  };
+  initial_balance: {
+    required: boolean;
+    min: number;
+  };
+  account_type: {
+    required: boolean;
+    allowedValues: AccountType[];
+  };
+  currency: {
+    required: boolean;
+    allowedValues: Currency[];
+  };
+}
+
+// Resultado de validación de cuenta
+export interface AccountValidationResult {
+  isValid: boolean;
+  errors: Partial<Record<keyof CreateAccountData, string>>;
 }
