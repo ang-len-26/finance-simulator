@@ -36,6 +36,8 @@ export interface ApiError {
 export interface DateRangeFilter {
   start_date?: string;
   end_date?: string;
+  date_after?: string;
+  date_before?: string;
 }
 
 export interface PaginationParams {

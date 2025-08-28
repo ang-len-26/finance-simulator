@@ -1,6 +1,6 @@
 // =====================================================
 // API ENDPOINTS - URLs reales del backend Django
-// Actualizado: Auth (Rama 1) + Accounts (Rama 2)
+// Actualizado: Auth (Rama 1) + Accounts (Rama 2) + Transactions (Rama 3)
 // =====================================================
 
 // Base API URL
@@ -45,20 +45,38 @@ export const ACCOUNTS_ENDPOINTS = {
 } as const;
 
 // =====================================================
-// TRANSACTIONS ENDPOINTS (PENDIENTE RAMA 3)
+// TRANSACTIONS ENDPOINTS (RAMA 3 - COMPLETADO)
+// Basado en urls.py y views.py reales del backend
 // =====================================================
 export const TRANSACTIONS_ENDPOINTS = {
-  // Transactions CRUD
-  TRANSACTIONS: '/transactions/',                // GET, POST - Lista y crear transacciones
-  TRANSACTION_DETAIL: (id: number) => `/transactions/${id}/`,  // GET, PUT, PATCH, DELETE
+  // ✅ Transactions CRUD (TransactionViewSet)
+  TRANSACTIONS: '/transactions/',                              // GET, POST - Lista y crear transacciones
+  TRANSACTION_DETAIL: (id: number) => `/transactions/${id}/`, // GET, PUT, PATCH, DELETE
   
-  // Categories CRUD
-  CATEGORIES: '/categories/',                    // GET, POST - Lista y crear categorías
+  // ✅ Transaction custom actions (@action del ViewSet)
+  TRANSACTION_RECENT: '/transactions/recent/',                 // GET - Últimas 10 transacciones
+  TRANSACTION_BY_TYPE: '/transactions/by_type/',               // GET - Transacciones agrupadas por tipo
+  TRANSACTION_SEARCH: '/transactions/search/',                 // GET - Búsqueda avanzada (?q=netflix)
+  TRANSACTION_DASHBOARD: '/transactions/dashboard/',           // GET - Dashboard con métricas del período
+  
+  // ✅ Categories CRUD (CategoryViewSet)
+  CATEGORIES: '/categories/',                                  // GET, POST - Lista y crear categorías
   CATEGORY_DETAIL: (id: number) => `/categories/${id}/`,      // GET, PUT, PATCH, DELETE
   
-  // Transaction specific actions (POR CONFIRMAR EN RAMA 3)
-  TRANSACTION_SUMMARY: '/transactions/summary/', // GET - Resumen de transacciones
-  BULK_IMPORT: '/transactions/bulk-import/',     // POST - Importar transacciones masivas
+  // ✅ Category custom actions (@action del ViewSet)
+  CATEGORIES_BY_TYPE: '/categories/by_type/',                  // GET - Categorías por income/expense
+  CATEGORIES_HIERARCHY: '/categories/hierarchy/',              // GET - Estructura jerárquica
+  CATEGORY_TRANSACTIONS: (id: number) => `/categories/${id}/transactions/`, // GET - Transacciones de categoría
+  CATEGORY_MONTHLY_TREND: (id: number) => `/categories/${id}/monthly_trend/`, // GET - Tendencia mensual (12 meses)
+  CATEGORIES_CREATE_DEFAULTS: '/categories/create_defaults/',  // POST - Crear categorías predeterminadas
+  CATEGORIES_STATISTICS: '/categories/statistics/',            // GET - Estadísticas generales
+  CATEGORIES_SUMMARY_REPORT: '/categories/summary_report/',    // GET - Reporte de resumen con comparativas
+  
+  // ✅ Budget Alerts (BudgetAlertViewSet - ReadOnly)
+  BUDGET_ALERTS: '/budget-alerts/',                           // GET - Todas las alertas del usuario
+  BUDGET_ALERT_DETAIL: (id: number) => `/budget-alerts/${id}/`, // GET - Alerta específica
+  BUDGET_ALERT_MARK_READ: (id: number) => `/budget-alerts/${id}/mark_read/`, // POST - Marcar como leída
+  BUDGET_ALERTS_UNREAD: '/budget-alerts/unread/',             // GET - Solo alertas no leídas
 } as const;
 
 // =====================================================
@@ -137,7 +155,7 @@ export const buildUrlWithParams = (
   
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
-      // Manejar arrays para filtros múltiples (ej: account_type=checking,savings)
+      // Manejar arrays para filtros múltiples (ej: tags=comida,trabajo)
       if (Array.isArray(value)) {
         url.searchParams.append(key, value.join(','));
       } else {
@@ -183,6 +201,7 @@ export const ENDPOINT_GROUPS = {
     ACCOUNTS_ENDPOINTS.ACCOUNT_SUMMARY,
     TRANSACTIONS_ENDPOINTS.TRANSACTIONS,
     TRANSACTIONS_ENDPOINTS.CATEGORIES,
+    TRANSACTIONS_ENDPOINTS.BUDGET_ALERTS,
     ANALYTICS_ENDPOINTS.REPORTS,
     GOALS_ENDPOINTS.GOALS,
   ],
@@ -192,6 +211,122 @@ export const ENDPOINT_GROUPS = {
     SETUP_ENDPOINTS.CREATE_SUPERUSER,
   ],
 } as const;
+
+// =====================================================
+// TRANSACTIONS SPECIFIC HELPERS (RAMA 3 - NUEVO)
+// =====================================================
+
+/**
+ * Construir filtros de transactions para query params
+ */
+export const buildTransactionFilters = (filters: Record<string, any>): Record<string, any> => {
+  const cleanFilters: Record<string, any> = {};
+  
+  // Mapear filtros específicos de transactions según TransactionFilter
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      switch (key) {
+        // Montos
+        case 'minAmount':
+          cleanFilters.min_amount = value;
+          break;
+        case 'maxAmount':
+          cleanFilters.max_amount = value;
+          break;
+        
+        // Cuentas
+        case 'fromAccount':
+          cleanFilters.from_account = value;
+          break;
+        case 'toAccount':
+          cleanFilters.to_account = value;
+          break;
+        case 'account':
+          cleanFilters.account = value;
+          break;
+        case 'bankName':
+          cleanFilters.bank = value;
+          break;
+        case 'accountType':
+          cleanFilters.account_type = value;
+          break;
+        
+        // Fechas
+        case 'dateAfter':
+          cleanFilters.date_after = value;
+          break;
+        case 'dateBefore':
+          cleanFilters.date_before = value;
+          break;
+        
+        // Búsqueda
+        case 'search':
+          cleanFilters.description = value;
+          break;
+        
+        // Referencias y ubicación
+        case 'hasReference':
+          cleanFilters.has_reference = value;
+          break;
+        
+        // Recurrencia
+        case 'isRecurring':
+          cleanFilters.is_recurring = value;
+          break;
+        case 'recurringFrequency':
+          cleanFilters.recurring_frequency = value;
+          break;
+        
+        // Flujo de efectivo
+        case 'cashFlow':
+          cleanFilters.cash_flow = value;
+          break;
+        
+        // Etiquetas (convertir array a string separado por comas)
+        case 'tags':
+          if (Array.isArray(value)) {
+            cleanFilters.tags = value.join(',');
+          } else {
+            cleanFilters.tags = value;
+          }
+          break;
+        
+        // Campos directos
+        default:
+          cleanFilters[key] = value;
+      }
+    }
+  });
+  
+  return cleanFilters;
+};
+
+/**
+ * Construir filtros de categories para query params
+ */
+export const buildCategoryFilters = (filters: Record<string, any>): Record<string, any> => {
+  const cleanFilters: Record<string, any> = {};
+  
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      switch (key) {
+        case 'categoryType':
+          cleanFilters.category_type = value;
+          break;
+        case 'isActive':
+          cleanFilters.is_active = value;
+          break;
+        case 'parentId':
+          cleanFilters.parent = value;
+          break;
+        default:
+          cleanFilters[key] = value;
+      }
+    }
+  });
+  
+  return cleanFilters;
+};
 
 // =====================================================
 // ACCOUNTS SPECIFIC HELPERS (RAMA 2)
