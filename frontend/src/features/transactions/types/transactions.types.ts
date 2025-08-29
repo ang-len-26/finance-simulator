@@ -1,6 +1,5 @@
 // =====================================================
 // TIPOS DE TRANSACTIONS - Basados en models.py y serializers.py reales
-// Rama 3 - Transactions Module
 // =====================================================
 
 import { DateRangeFilter, PaginationParams } from "@/types/api.types";

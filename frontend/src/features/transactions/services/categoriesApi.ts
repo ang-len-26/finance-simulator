@@ -1,7 +1,6 @@
 // =====================================================
 // CATEGORIES API SERVICE
 // Basado en CategoryViewSet del backend
-// Rama 3.1 - Transactions Module
 // =====================================================
 
 import apiClient from '@/services/api/client';

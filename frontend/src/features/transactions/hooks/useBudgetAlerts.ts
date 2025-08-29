@@ -1,14 +1,13 @@
 // =====================================================
 // useBudgetAlerts - Hook para gestión de alertas de presupuesto
 // Basado en BudgetAlertViewSet del backend
-// Subrama 3.2 - Transactions Hooks
 // =====================================================
 
 import { useState, useCallback, useEffect } from 'react';
 import { useAsyncState } from '@/hooks/useAsyncState';
-import { transactionsApi } from '../services/transactionsApi';
+import { budgetAlertsApi } from '../services/transactionsApi'; // CORREGIDO: usar budgetAlertsApi
 import { BudgetAlert, UnreadAlertsResult } from '../types/transactions.types';
-import { PaginatedResponse, ApiError } from '@/types/api.types';
+import { ApiError } from '@/types/api.types';
 
 // =====================================================
 // TIPOS INTERNOS DEL HOOK
@@ -56,6 +55,20 @@ interface UseBudgetAlertsReturn {
   startPolling: () => void;
   stopPolling: () => void;
   isPolling: boolean;
+  
+  // Browser notifications
+  showBrowserNotification: (alert: BudgetAlert) => void;
+  requestNotificationPermission: () => Promise<boolean>;
+  
+  // Statistics
+  getAlertStatistics: () => {
+    total: number;
+    unread: number;
+    read: number;
+    byType: Record<string, number>;
+    bySeverity: Record<string, number>;
+    recent24h: number;
+  };
 }
 
 // =====================================================
@@ -69,14 +82,7 @@ export const useBudgetAlerts = (options: UseBudgetAlertsOptions = {}): UseBudget
     onNewAlert
   } = options;
 
-  // Estado principal usando useAsyncState
-  const {
-    data: asyncData,
-    isLoading,
-    error,
-    execute,
-    clearError
-  } = useAsyncState<PaginatedResponse<BudgetAlert>>();
+  const [asyncState, asyncActions] = useAsyncState<BudgetAlert[]>();
 
   // Estado local del hook
   const [state, setState] = useState<UseBudgetAlertsState>({
@@ -97,16 +103,19 @@ export const useBudgetAlerts = (options: UseBudgetAlertsOptions = {}): UseBudget
   // =====================================================
 
   const loadAlerts = useCallback(async () => {
-    const result = await execute(() => transactionsApi.getBudgetAlerts());
+    asyncActions.setLoading(true);
+    asyncActions.setError(null);
     
-    if (result) {
+    try {
+      const alerts = await budgetAlertsApi.list();
+      
       const previousUnreadCount = state.unreadCount;
-      const newUnreadAlerts = result.results.filter(alert => !alert.is_read);
+      const newUnreadAlerts = alerts.filter((alert: BudgetAlert) => !alert.is_read); // CORREGIDO: tipado explícito
       
       setState(prev => ({
         ...prev,
-        alerts: result.results,
-        totalCount: result.count,
+        alerts: alerts,
+        totalCount: alerts.length,
         unreadAlerts: newUnreadAlerts,
         unreadCount: newUnreadAlerts.length,
         hasNewAlerts: newUnreadAlerts.length > previousUnreadCount
@@ -115,13 +124,21 @@ export const useBudgetAlerts = (options: UseBudgetAlertsOptions = {}): UseBudget
       // Notificar nuevas alertas si hay callback
       if (onNewAlert && newUnreadAlerts.length > previousUnreadCount) {
         const newAlerts = newUnreadAlerts.slice(0, newUnreadAlerts.length - previousUnreadCount);
-        newAlerts.forEach(alert => onNewAlert(alert));
+        newAlerts.forEach((alert: BudgetAlert) => onNewAlert(alert)); // CORREGIDO: tipado explícito
       }
+      
+      asyncActions.setData(alerts);
+    } catch (error) {
+      const apiError = error as ApiError;
+      asyncActions.setError(apiError.message || 'Error al cargar alertas');
+    } finally {
+      asyncActions.setLoading(false);
     }
-  }, [execute, state.unreadCount, onNewAlert]);
+  }, [asyncActions, state.unreadCount, onNewAlert]);
 
   const loadUnreadAlerts = useCallback(async (): Promise<UnreadAlertsResult> => {
-    const result = await transactionsApi.getUnreadAlerts();
+    
+    const result = await budgetAlertsApi.getUnread();
     
     setState(prev => ({
       ...prev,
@@ -134,7 +151,8 @@ export const useBudgetAlerts = (options: UseBudgetAlertsOptions = {}): UseBudget
   }, []);
 
   const getAlert = useCallback(async (id: number): Promise<BudgetAlert> => {
-    const alert = await transactionsApi.getBudgetAlert(id);
+    
+    const alert = await budgetAlertsApi.retrieve(id);
     
     setState(prev => ({
       ...prev,
@@ -144,8 +162,8 @@ export const useBudgetAlerts = (options: UseBudgetAlertsOptions = {}): UseBudget
     return alert;
   }, []);
 
-  const markAsRead = useCallback(async (id: number): Promise<void> => {
-    await transactionsApi.markAlertAsRead(id);
+  const markAsRead = useCallback(async (id: number): Promise<void> => {    
+    await budgetAlertsApi.markAsRead(id);
     
     // Actualizar estado local
     setState(prev => ({
@@ -162,12 +180,9 @@ export const useBudgetAlerts = (options: UseBudgetAlertsOptions = {}): UseBudget
   }, []);
 
   const markAllAsRead = useCallback(async (): Promise<void> => {
-    // Marcar todas las alertas no leídas como leídas
-    const markPromises = state.unreadAlerts.map(alert => 
-      transactionsApi.markAlertAsRead(alert.id)
-    );
     
-    await Promise.all(markPromises);
+    const unreadIds = state.unreadAlerts.map(alert => alert.id);
+    await budgetAlertsApi.markMultipleAsRead(unreadIds);
     
     // Actualizar estado local
     setState(prev => ({
@@ -252,7 +267,7 @@ export const useBudgetAlerts = (options: UseBudgetAlertsOptions = {}): UseBudget
     if (autoLoad) {
       loadAlerts();
     }
-  }, [autoLoad]);
+  }, [autoLoad, loadAlerts]);
 
   // Cleanup del polling al desmontar
   useEffect(() => {
@@ -264,10 +279,10 @@ export const useBudgetAlerts = (options: UseBudgetAlertsOptions = {}): UseBudget
   }, [pollingInterval]);
 
   // =====================================================
-  // HOOKS PERSONALIZADOS ADICIONALES
+  // BROWSER NOTIFICATIONS
   // =====================================================
 
-  // Hook para notificaciones del navegador
+  // CORREGIDO: Funciones agregadas al return type
   const requestNotificationPermission = useCallback(async (): Promise<boolean> => {
     if (!('Notification' in window)) {
       console.warn('Este navegador no soporta notificaciones');
@@ -294,7 +309,10 @@ export const useBudgetAlerts = (options: UseBudgetAlertsOptions = {}): UseBudget
     }
   }, []);
 
-  // Hook para estadísticas de alertas
+  // =====================================================
+  // STATISTICS
+  // =====================================================
+
   const getAlertStatistics = useCallback(() => {
     const total = state.alerts.length;
     const unread = state.unreadCount;
@@ -327,8 +345,8 @@ export const useBudgetAlerts = (options: UseBudgetAlertsOptions = {}): UseBudget
   return {
     // Estado
     data: state,
-    isLoading,
-    error,
+    isLoading: asyncState.loading,
+    error: asyncState.error ? { message: asyncState.error } : null,
     
     // Operaciones básicas
     loadAlerts,
@@ -339,7 +357,7 @@ export const useBudgetAlerts = (options: UseBudgetAlertsOptions = {}): UseBudget
     
     // Utilidades
     refreshAlerts,
-    clearError,
+    clearError: asyncActions.reset,
     setSelectedAlert,
     
     // Filtros y helpers
@@ -352,9 +370,11 @@ export const useBudgetAlerts = (options: UseBudgetAlertsOptions = {}): UseBudget
     stopPolling,
     isPolling,
     
-    // Funciones adicionales
-    requestNotificationPermission,
+    // Browser notifications - CORREGIDO: agregado al return
     showBrowserNotification,
+    requestNotificationPermission,
+    
+    // Statistics
     getAlertStatistics
   };
 };
@@ -380,7 +400,7 @@ export const useAlertNotifications = (options: UseAlertNotificationsOptions = {}
     autoLoad: true,
     pollInterval,
     onNewAlert: enableBrowserNotifications 
-      ? (alert) => alertsHook.showBrowserNotification(alert)
+      ? (alert: BudgetAlert) => alertsHook.showBrowserNotification(alert) // CORREGIDO: tipado
       : undefined
   });
 
@@ -388,14 +408,14 @@ export const useAlertNotifications = (options: UseAlertNotificationsOptions = {}
     if (enableBrowserNotifications) {
       alertsHook.requestNotificationPermission();
     }
-  }, [enableBrowserNotifications]);
+  }, [enableBrowserNotifications, alertsHook]);
 
   useEffect(() => {
     if (enablePolling) {
       alertsHook.startPolling();
       return () => alertsHook.stopPolling();
     }
-  }, [enablePolling]);
+  }, [enablePolling, alertsHook]);
 
   return alertsHook;
 };

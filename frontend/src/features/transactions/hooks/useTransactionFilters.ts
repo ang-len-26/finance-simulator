@@ -1,7 +1,6 @@
 // =====================================================
 // useTransactionFilters - Hook para filtros avanzados de transacciones
 // Basado en TransactionFilter del backend
-// Subrama 3.2 - Transactions Hooks
 // =====================================================
 
 import { useState, useCallback, useMemo } from 'react';

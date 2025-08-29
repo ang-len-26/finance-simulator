@@ -1,7 +1,6 @@
 // =====================================================
 // useTransactions - Hook principal para gestión de transacciones
 // Basado en TransactionViewSet del backend
-// Subrama 3.3.1 - CORREGIDO
 // =====================================================
 
 import { useState, useCallback, useEffect } from 'react';
@@ -18,7 +17,7 @@ import {
   TransactionSearchResult,
   RecentTransactionsResult 
 } from '../types/transactions.types';
-import { PaginatedResponse, ApiError } from '@/types/api.types';
+import { PaginatedResponse } from '@/types/api.types';
 
 // =====================================================
 // TIPOS INTERNOS DEL HOOK
@@ -79,7 +78,6 @@ export const useTransactions = (options: UseTransactionsOptions = {}): UseTransa
     pageSize = 20
   } = options;
 
-  // CORRIGIDO: useAsyncState devuelve [state, actions]
   const [asyncState, asyncActions] = useAsyncState<PaginatedResponse<TransactionSummary>>();
   const { data: asyncData, loading: isLoading, error } = asyncState;
   const { setData, setLoading, setError, reset } = asyncActions;
@@ -118,14 +116,13 @@ export const useTransactions = (options: UseTransactionsOptions = {}): UseTransa
   }, [setLoading, setError]);
 
   // =====================================================
-  // OPERACIONES DE CARGA
+  // ACCIONES PRINCIPALES CRUD
   // =====================================================
 
   const loadTransactions = useCallback(async (filters?: TransactionFilters) => {
     const finalFilters = filters ? { ...currentFilters, ...filters, page: 1 } : currentFilters;
     setCurrentFilters(finalFilters);
 
-    // CORRIGIDO: usar 'list' en lugar de 'getTransactions'
     const result = await executeAsync(() => transactionsApi.list(finalFilters));
     
     if (result) {
@@ -145,8 +142,6 @@ export const useTransactions = (options: UseTransactionsOptions = {}): UseTransa
 
     const nextPage = state.currentPage + 1;
     const filters = { ...currentFilters, page: nextPage };
-
-    // CORRIGIDO: usar 'list' en lugar de 'getTransactions'
     const result = await executeAsync(() => transactionsApi.list(filters));
     
     if (result) {
@@ -164,14 +159,12 @@ export const useTransactions = (options: UseTransactionsOptions = {}): UseTransa
 
     const previousPage = state.currentPage - 1;
     const filters = { ...currentFilters, page: previousPage };
-
-    // CORRIGIDO: usar 'list' en lugar de 'getTransactions'
     const result = await executeAsync(() => transactionsApi.list(filters));
     
     if (result) {
       setState(prev => ({
         ...prev,
-        transactions: result.results, // Reemplazar resultados
+        transactions: result.results,
         hasNextPage: !!result.next,
         currentPage: previousPage
       }));
@@ -182,8 +175,6 @@ export const useTransactions = (options: UseTransactionsOptions = {}): UseTransa
     if (page < 1 || isLoading) return;
 
     const filters = { ...currentFilters, page };
-
-    // CORRIGIDO: usar 'list' en lugar de 'getTransactions'
     const result = await executeAsync(() => transactionsApi.list(filters));
     
     if (result) {
@@ -207,7 +198,6 @@ export const useTransactions = (options: UseTransactionsOptions = {}): UseTransa
       throw new Error(`Errores de validación: ${validationErrors.join(', ')}`);
     }
 
-    // CORRIGIDO: usar 'create' en lugar de 'createTransaction'
     const result = await executeAsync(() => transactionsApi.create(data));
     
     if (!result) {
@@ -242,7 +232,7 @@ export const useTransactions = (options: UseTransactionsOptions = {}): UseTransa
   }, [pageSize, executeAsync]);
 
   const updateTransaction = useCallback(async (id: number, data: UpdateTransactionData): Promise<Transaction> => {
-    // CORRIGIDO: usar 'update' en lugar de 'updateTransaction'
+
     const result = await executeAsync(() => transactionsApi.update(id, data));
     
     if (!result) {
@@ -278,7 +268,7 @@ export const useTransactions = (options: UseTransactionsOptions = {}): UseTransa
   }, [executeAsync]);
 
   const deleteTransaction = useCallback(async (id: number): Promise<void> => {
-    // CORRIGIDO: usar 'delete' en lugar de 'deleteTransaction'
+
     const result = await executeAsync(() => transactionsApi.delete(id));
     
     if (result === null && error) {
@@ -295,7 +285,7 @@ export const useTransactions = (options: UseTransactionsOptions = {}): UseTransa
   }, [executeAsync, error]);
 
   const getTransaction = useCallback(async (id: number): Promise<Transaction> => {
-    // CORRIGIDO: usar 'get' en lugar de 'getTransaction'
+    
     const result = await executeAsync(() => transactionsApi.get(id));
     
     if (!result) {
@@ -317,7 +307,7 @@ export const useTransactions = (options: UseTransactionsOptions = {}): UseTransa
   // =====================================================
 
   const searchTransactions = useCallback(async (query: string): Promise<TransactionSearchResult> => {
-    // CORRIGIDO: usar 'search' en lugar de 'searchTransactions'
+    
     const result = await executeAsync(() => transactionsApi.search(query));
     
     if (!result) {
@@ -328,7 +318,7 @@ export const useTransactions = (options: UseTransactionsOptions = {}): UseTransa
   }, [executeAsync]);
 
   const loadRecent = useCallback(async (): Promise<RecentTransactionsResult> => {
-    // CORRIGIDO: usar 'getRecent' en lugar de 'getRecentTransactions'
+    
     const result = await executeAsync(() => transactionsApi.getRecent());
     
     if (!result) {
@@ -339,7 +329,7 @@ export const useTransactions = (options: UseTransactionsOptions = {}): UseTransa
   }, [executeAsync]);
 
   const loadByType = useCallback(async (): Promise<TransactionByType> => {
-    // CORRIGIDO: usar 'getByType' en lugar de 'getTransactionsByType'
+    
     const result = await executeAsync(() => transactionsApi.getByType());
     
     if (!result) {

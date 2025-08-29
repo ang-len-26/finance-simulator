@@ -1,6 +1,6 @@
 // =====================================================
-// USE CATEGORIES HOOK - CORREGIDO
-// Subrama 3.3.2 - Corrección de errores
+// useCategories - Hook principal para gestión de categorías
+// Basado en CategoryViewSet del backend
 // =====================================================
 
 import { useState, useCallback, useEffect } from 'react';
@@ -21,7 +21,7 @@ import {
 import { PaginatedResponse } from '@/types/api.types';
 
 // =====================================================
-// INTERFACES
+// TIPOS INTERNOS DEL HOOK
 // =====================================================
 
 export interface UseCategoriesFilters extends CategoryFilters {
@@ -50,7 +50,7 @@ export interface UseCategoriesReturn {
   isDeleting: boolean;
   isLoadingHierarchy: boolean;
   
-  // Acciones principales CRUD
+  // Operaciones CRUD
   loadCategories: (filters?: CategoryFilters) => Promise<CategorySummary[]>;
   loadCategoriesPaginated: (filters?: CategoryFilters) => Promise<PaginatedResponse<CategorySummary>>;
   createCategory: (data: CreateCategoryData) => Promise<Category>;
@@ -78,7 +78,6 @@ export interface UseCategoriesReturn {
 // =====================================================
 
 export const useCategories = (initialFilters?: UseCategoriesFilters): UseCategoriesReturn => {
-  // ERROR CORREGIDO 2: useAsyncState devuelve array, no objeto
   const [
     { data: asyncData, loading, error: asyncError }, 
     { setData, setLoading, setError, reset }
@@ -109,7 +108,6 @@ export const useCategories = (initialFilters?: UseCategoriesFilters): UseCategor
       setLoading(true);
       setCustomError(null);
       
-      // ERROR CORREGIDO 3: Usar métodos correctos de categoriesApi
       const result = await categoriesApi.list(filters);
       setCategories(result);
       
@@ -146,13 +144,11 @@ export const useCategories = (initialFilters?: UseCategoriesFilters): UseCategor
     }
   }, [setLoading]);
   
-  // ERROR CORREGIDO 1: Renombrar función para evitar conflicto de nombres
   const loadHierarchyData = useCallback(async (): Promise<CategoryHierarchy[]> => {
     try {
       setIsLoadingHierarchy(true);
       setCustomError(null);
       
-      // ERROR CORREGIDO 3: Usar método correcto
       const result = await categoriesApi.getHierarchy();
       setHierarchyData(result);
       
@@ -177,7 +173,6 @@ export const useCategories = (initialFilters?: UseCategoriesFilters): UseCategor
         throw new Error(validationErrors.join(', '));
       }
       
-      // ERROR CORREGIDO 3: Usar método correcto
       const newCategory = await categoriesApi.create(data);
       
       // Actualizar lista local
@@ -203,7 +198,6 @@ export const useCategories = (initialFilters?: UseCategoriesFilters): UseCategor
       setIsUpdating(true);
       setCustomError(null);
       
-      // ERROR CORREGIDO 3: Usar método correcto
       const updatedCategory = await categoriesApi.update(id, data);
       
       // Actualizar en lista local
@@ -222,7 +216,6 @@ export const useCategories = (initialFilters?: UseCategoriesFilters): UseCategor
     }
   }, []);
   
-  // ERROR CORREGIDO 4: Usar método correcto (delete en lugar de deleteCategory)
   const deleteCategory = useCallback(async (id: number): Promise<boolean> => {
     try {
       setIsDeleting(true);
@@ -234,7 +227,6 @@ export const useCategories = (initialFilters?: UseCategoriesFilters): UseCategor
         throw new Error(canDelete.reason);
       }
       
-      // ERROR CORREGIDO 4: Usar método correcto
       await categoriesApi.delete(id);
       
       // Remover de lista local
@@ -290,7 +282,7 @@ export const useCategories = (initialFilters?: UseCategoriesFilters): UseCategor
     filters?: { start_date?: string; end_date?: string; limit?: number }
   ): Promise<CategoryTransactionsResult> => {
     try {
-      // ERROR CORREGIDO 3: Usar método correcto
+    
       return await categoriesApi.getTransactions(id, filters);
     } catch (err: any) {
       setCustomError(err.message || 'Error al obtener transacciones de categoría');
@@ -300,7 +292,7 @@ export const useCategories = (initialFilters?: UseCategoriesFilters): UseCategor
   
   const getCategoryTrend = useCallback(async (id: number): Promise<CategoryMonthlyTrend> => {
     try {
-      // ERROR CORREGIDO 3: Usar método correcto
+    
       return await categoriesApi.getMonthlyTrend(id);
     } catch (err: any) {
       setCustomError(err.message || 'Error al obtener tendencia de categoría');
@@ -314,7 +306,7 @@ export const useCategories = (initialFilters?: UseCategoriesFilters): UseCategor
   }> => {
     try {
       setIsCreating(true);
-      // ERROR CORREGIDO 3: Usar método correcto
+
       const result = await categoriesApi.createDefaults();
       
       // Recargar categorías después de crear defaults
@@ -374,8 +366,11 @@ export const useCategories = (initialFilters?: UseCategoriesFilters): UseCategor
   
   // Auto-cargar jerarquía si se especifica
   useEffect(() => {
-    if (initialFilters?.autoLoad && initialFilters.loadHierarchy) {
-      loadHierarchyData();
+    if (initialFilters?.autoLoad) {
+      (async () => {
+        await loadCategories();
+        await loadHierarchyData();
+      })();
     }
   }, [loadHierarchyData, initialFilters]);
   
@@ -411,7 +406,7 @@ export const useCategories = (initialFilters?: UseCategoriesFilters): UseCategor
     deleteCategory,
     
     // Acciones específicas custom
-    loadHierarchy: loadHierarchyData,  // ERROR CORREGIDO 1: Usar función renombrada
+    loadHierarchy: loadHierarchyData,
     loadByType,
     loadStatistics,
     getCategoryTransactions,
@@ -457,11 +452,12 @@ export const useCategoriesByType = (categoryType?: 'income' | 'expense' | 'both'
 export const useCategoryHierarchy = () => {
   const hook = useCategories({
     autoLoad: false,
-    loadHierarchy: true,
   });
   
   useEffect(() => {
-    hook.loadHierarchy();
+    (async () => {
+      await hook.loadHierarchy();
+    })();
   }, []);
   
   return {
