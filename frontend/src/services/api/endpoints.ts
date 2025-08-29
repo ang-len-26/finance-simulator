@@ -1,6 +1,6 @@
 // =====================================================
 // API ENDPOINTS - URLs reales del backend Django
-// Actualizado: Auth (Rama 1) + Accounts (Rama 2) + Transactions (Rama 3)
+// Actualizado: Auth (Rama 1) + Accounts (Rama 2) + Transactions (Rama 3) + Analytics (Rama 4)
 // =====================================================
 
 // Base API URL
@@ -8,6 +8,7 @@ export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:80
 
 // =====================================================
 // AUTH ENDPOINTS (RAMA 1 - COMPLETADO)
+// Basado en auth/urls.py y views.py reales del backend
 // =====================================================
 export const AUTH_ENDPOINTS = {
   // JWT Authentication (django-rest-framework-simplejwt)
@@ -30,7 +31,7 @@ export const SETUP_ENDPOINTS = {
 
 // =====================================================
 // ACCOUNTS ENDPOINTS (RAMA 2 - COMPLETADO)
-// Basado en AccountViewSet real del backend
+// Basado en accounts/urls.py y views.py reales del backend
 // =====================================================
 export const ACCOUNTS_ENDPOINTS = {
   // Accounts CRUD
@@ -46,7 +47,7 @@ export const ACCOUNTS_ENDPOINTS = {
 
 // =====================================================
 // TRANSACTIONS ENDPOINTS (RAMA 3 - COMPLETADO)
-// Basado en urls.py y views.py reales del backend
+// Basado en transactions/urls.py y views.py reales del backend
 // =====================================================
 export const TRANSACTIONS_ENDPOINTS = {
   // ✅ Transactions CRUD (TransactionViewSet)
@@ -80,19 +81,33 @@ export const TRANSACTIONS_ENDPOINTS = {
 } as const;
 
 // =====================================================
-// ANALYTICS ENDPOINTS (PENDIENTE RAMA 4)
+// ANALYTICS ENDPOINTS (RAMA 4 - COMPLETADO)
+// Basado en analytics/urls.py y views.py reales del backend
 // =====================================================
 export const ANALYTICS_ENDPOINTS = {
-  // Reports and Analytics (POR CONFIRMAR)
-  REPORTS: '/reports/',                          // GET - Reportes generales
-  METRICS: '/metrics/',                          // GET - Métricas financieras
-  ALERTS: '/alerts/',                            // GET - Alertas de presupuesto
+  // ✅ Reports CRUD (ReportsViewSet)
+  REPORTS: '/reports/',                                        // GET, POST - Métricas financieras CRUD
+  REPORT_DETAIL: (id: number) => `/reports/${id}/`,           // GET, PUT, PATCH, DELETE - Métrica específica
   
-  // Specific analytics (POR CONFIRMAR)
-  INCOME_VS_EXPENSES: '/reports/income-vs-expenses/',
-  CATEGORY_DISTRIBUTION: '/reports/category-distribution/',
-  BALANCE_TIMELINE: '/reports/balance-timeline/',
-  FINANCIAL_RATIOS: '/reports/financial-ratios/',
+  // ✅ Dashboard y métricas principales (@action methods)
+  REPORTS_METRICS: '/reports/metrics/',                        // GET - Métricas principales + comparativas (4 tarjetas superiores)
+  REPORTS_INCOME_VS_EXPENSES: '/reports/income-vs-expenses/',  // GET - Gráfico ingresos vs gastos mensuales (12 meses)
+  REPORTS_BALANCE_TIMELINE: '/reports/balance-timeline/',      // GET - Timeline balance acumulado día por día
+  REPORTS_CATEGORY_DISTRIBUTION: '/reports/category-distribution/', // GET - Distribución gastos por categoría (pie/dona)
+  REPORTS_TOP_CATEGORIES: '/reports/top-categories/',          // GET - Top 5 categorías con detalles y tendencias
+  REPORTS_RECENT_TRANSACTIONS: '/reports/recent-transactions/', // GET - Transacciones recientes con íconos
+  REPORTS_FINANCIAL_METRICS: '/reports/financial-metrics/',   // GET - Métricas precalculadas por período
+  
+  // ✅ Sistema de alertas (@action methods)
+  REPORTS_ALERTS: '/reports/alerts/',                          // GET - Alertas de presupuesto con filtros
+  REPORTS_MARK_ALERT_READ: '/reports/mark-alert-read/',        // POST - Marcar alertas como leídas (bulk)
+  
+  // ✅ Análisis avanzado (@action methods)
+  REPORTS_CATEGORY_TRENDS: '/reports/category-trends/',        // GET - Tendencias de categorías en tiempo (6-8 períodos)
+  
+  // ✅ Endpoints independientes (function-based views)
+  REPORTS_OVERVIEW: '/reports-overview/',                      // GET - Dashboard completo en una sola llamada
+  FINANCIAL_RATIOS: '/financial-ratios/',                      // GET - Ratios financieros profesionales + recomendaciones
 } as const;
 
 // =====================================================
@@ -176,7 +191,7 @@ export const isValidEndpoint = (endpoint: string): boolean => {
     ...Object.values(SETUP_ENDPOINTS),
     ...Object.values(ACCOUNTS_ENDPOINTS).filter(ep => typeof ep === 'string'),
     ...Object.values(TRANSACTIONS_ENDPOINTS).filter(ep => typeof ep === 'string'),
-    ...Object.values(ANALYTICS_ENDPOINTS),
+    ...Object.values(ANALYTICS_ENDPOINTS).filter(ep => typeof ep === 'string'),
     ...Object.values(GOALS_ENDPOINTS).filter(ep => typeof ep === 'string'),
   ];
   
@@ -203,6 +218,8 @@ export const ENDPOINT_GROUPS = {
     TRANSACTIONS_ENDPOINTS.CATEGORIES,
     TRANSACTIONS_ENDPOINTS.BUDGET_ALERTS,
     ANALYTICS_ENDPOINTS.REPORTS,
+    ANALYTICS_ENDPOINTS.REPORTS_OVERVIEW,
+    ANALYTICS_ENDPOINTS.FINANCIAL_RATIOS,
     GOALS_ENDPOINTS.GOALS,
   ],
   
@@ -213,7 +230,105 @@ export const ENDPOINT_GROUPS = {
 } as const;
 
 // =====================================================
-// TRANSACTIONS SPECIFIC HELPERS (RAMA 3 - NUEVO)
+// ANALYTICS SPECIFIC HELPERS (RAMA 4)
+// =====================================================
+
+/**
+ * Construir filtros de analytics para query params
+ */
+export const buildAnalyticsFilters = (filters: Record<string, any>): Record<string, any> => {
+  const cleanFilters: Record<string, any> = {};
+  
+  // Mapear filtros específicos de analytics
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      switch (key) {
+        // Períodos
+        case 'periodType':
+          cleanFilters.period_type = value;
+          break;
+        case 'period':
+          cleanFilters.period = value; // monthly, quarterly, yearly, custom, last_30_days, last_90_days
+          break;
+        case 'startDate':
+          cleanFilters.start_date = value;
+          break;
+        case 'endDate':
+          cleanFilters.end_date = value;
+          break;
+        
+        // Alertas
+        case 'severity':
+          cleanFilters.severity = value; // low, medium, high, critical
+          break;
+        case 'alertType':
+          cleanFilters.alert_type = value; // budget_exceeded, unusual_expense, income_drop, account_low, category_spike
+          break;
+        case 'isRead':
+          cleanFilters.is_read = value;
+          break;
+        case 'includeDismissed':
+          cleanFilters.include_dismissed = value;
+          break;
+        
+        // Filtros de datos
+        case 'limit':
+          cleanFilters.limit = value;
+          break;
+        case 'categoryId':
+          cleanFilters.category = value;
+          break;
+        case 'accountId':
+          cleanFilters.account = value;
+          break;
+        
+        // Campos directos
+        default:
+          cleanFilters[key] = value;
+      }
+    }
+  });
+  
+  return cleanFilters;
+};
+
+/**
+ * Construir parámetros para reportes con períodos predefinidos
+ */
+export const buildReportPeriodParams = (period: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'last_30_days' | 'last_90_days' | 'custom', customDates?: { start: string; end: string }): Record<string, any> => {
+  const params: Record<string, any> = { period };
+  
+  if (period === 'custom' && customDates) {
+    params.start_date = customDates.start;
+    params.end_date = customDates.end;
+  }
+  
+  return params;
+};
+
+/**
+ * Construir parámetros para alertas con filtros comunes
+ */
+export const buildAlertParams = (filters: {
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  alertType?: 'budget_exceeded' | 'unusual_expense' | 'income_drop' | 'account_low' | 'category_spike';
+  unreadOnly?: boolean;
+  includeDismissed?: boolean;
+  limit?: number;
+}): Record<string, any> => {
+  const params: Record<string, any> = {};
+  
+  if (filters.severity) params.severity = filters.severity;
+  if (filters.alertType) params.alert_type = filters.alertType;
+  if (filters.unreadOnly) params.is_read = 'false';
+  if (filters.includeDismissed !== undefined) params.include_dismissed = filters.includeDismissed;
+  if (filters.limit) params.limit = filters.limit;
+  
+  return params;
+};
+
+// =====================================================
+// TRANSACTIONS SPECIFIC HELPERS (RAMA 3)
 // =====================================================
 
 /**
@@ -373,7 +488,7 @@ export const buildAccountFilters = (filters: Record<string, any>): Record<string
 };
 
 // =====================================================
-// HELPER FUNCTIONS
+// AUTH SPECIFIC HELPERS (RAMA 1)
 // =====================================================
 
 /**
