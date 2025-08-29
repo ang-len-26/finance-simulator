@@ -1,356 +1,522 @@
 // =====================================================
-// useCategories - Hook para gestión de categorías
-// Basado en CategoryViewSet del backend
-// Subrama 3.2 - Transactions Hooks
+// USE CATEGORIES HOOK - CORREGIDO
+// Subrama 3.3.2 - Corrección de errores
 // =====================================================
 
 import { useState, useCallback, useEffect } from 'react';
 import { useAsyncState } from '@/hooks/useAsyncState';
 import { categoriesApi } from '../services/categoriesApi';
-import { 
-  Category, 
-  CategorySummary, 
-  CreateCategoryData, 
-  UpdateCategoryData, 
+import {
+  Category,
+  CategorySummary,
+  CreateCategoryData,
+  UpdateCategoryData,
   CategoryFilters,
   CategoriesByType,
   CategoryHierarchy,
   CategoryTransactionsResult,
   CategoryMonthlyTrend,
-  CategoryStatistics 
+  CategoryStatistics,
 } from '../types/transactions.types';
-import { PaginatedResponse, ApiError } from '@/types/api.types';
+import { PaginatedResponse } from '@/types/api.types';
 
 // =====================================================
-// TIPOS INTERNOS DEL HOOK
+// INTERFACES
 // =====================================================
 
-interface UseCategoriesState {
-  categories: CategorySummary[];
-  selectedCategory: Category | null;
-  hierarchyCategories: CategoryHierarchy[];
-  categoriesByType: CategoriesByType | null;
-  totalCount: number;
-}
-
-interface UseCategoriesOptions {
-  initialFilters?: CategoryFilters;
+export interface UseCategoriesFilters extends CategoryFilters {
   autoLoad?: boolean;
-  loadHierarchy?: boolean;
+  onError?: (error: string) => void;
+  onSuccess?: () => void;
 }
 
-interface UseCategoriesReturn {
+export interface UseCategoriesReturn {
   // Estado principal
-  data: UseCategoriesState;
+  categories: CategorySummary[];
   isLoading: boolean;
-  error: ApiError | null;
+  error: string | null;
   
-  // Operaciones CRUD
-  loadCategories: (filters?: CategoryFilters) => Promise<void>;
+  // Paginación
+  paginatedData: PaginatedResponse<CategorySummary> | null;
+  
+  // Estados específicos
+  hierarchyData: CategoryHierarchy[];
+  byTypeData: CategoriesByType | null;
+  statisticsData: CategoryStatistics | null;
+  
+  // Estados de carga específicos
+  isCreating: boolean;
+  isUpdating: boolean;
+  isDeleting: boolean;
+  isLoadingHierarchy: boolean;
+  
+  // Acciones principales CRUD
+  loadCategories: (filters?: CategoryFilters) => Promise<CategorySummary[]>;
+  loadCategoriesPaginated: (filters?: CategoryFilters) => Promise<PaginatedResponse<CategorySummary>>;
   createCategory: (data: CreateCategoryData) => Promise<Category>;
   updateCategory: (id: number, data: UpdateCategoryData) => Promise<Category>;
-  deleteCategory: (id: number) => Promise<void>;
-  getCategory: (id: number) => Promise<Category>;
+  deleteCategory: (id: number) => Promise<boolean>;
   
-  // Operaciones especiales
-  loadCategoriesByType: () => Promise<CategoriesByType>;
+  // Acciones específicas custom
   loadHierarchy: () => Promise<CategoryHierarchy[]>;
-  getCategoryTransactions: (id: number, startDate?: string, endDate?: string, limit?: number) => Promise<CategoryTransactionsResult>;
+  loadByType: () => Promise<CategoriesByType>;
+  loadStatistics: (startDate?: string, endDate?: string) => Promise<CategoryStatistics>;
+  getCategoryTransactions: (id: number, filters?: any) => Promise<CategoryTransactionsResult>;
   getCategoryTrend: (id: number) => Promise<CategoryMonthlyTrend>;
-  getCategoryStatistics: (startDate?: string, endDate?: string) => Promise<CategoryStatistics>;
   createDefaultCategories: () => Promise<{ message: string; total_categories: number }>;
   
   // Utilidades
   refreshCategories: () => Promise<void>;
   clearError: () => void;
-  setSelectedCategory: (category: Category | null) => void;
-  
-  // Helpers específicos de categorías
-  getCategoryById: (id: number) => CategorySummary | null;
-  getSubcategories: (parentId: number) => CategorySummary[];
-  getParentCategories: () => CategorySummary[];
-  filterCategoriesByType: (type: 'income' | 'expense' | 'both') => CategorySummary[];
+  findCategoryById: (id: number) => CategorySummary | undefined;
+  filterCategories: (query: string) => CategorySummary[];
+  canDelete: (id: number) => Promise<{ canDelete: boolean; reason?: string }>;
 }
 
 // =====================================================
 // HOOK PRINCIPAL
 // =====================================================
 
-export const useCategories = (options: UseCategoriesOptions = {}): UseCategoriesReturn => {
-  const {
-    initialFilters = { is_active: true },
-    autoLoad = true,
-    loadHierarchy = false
-  } = options;
-
-  // Estado principal usando useAsyncState
-  const {
-    data: asyncData,
-    isLoading,
-    error,
-    execute,
-    clearError
-  } = useAsyncState<PaginatedResponse<CategorySummary>>();
-
-  // Estado local del hook
-  const [state, setState] = useState<UseCategoriesState>({
-    categories: [],
-    selectedCategory: null,
-    hierarchyCategories: [],
-    categoriesByType: null,
-    totalCount: 0
-  });
-
-  // Filtros actuales
-  const [currentFilters, setCurrentFilters] = useState<CategoryFilters>(initialFilters);
-
+export const useCategories = (initialFilters?: UseCategoriesFilters): UseCategoriesReturn => {
+  // ERROR CORREGIDO 2: useAsyncState devuelve array, no objeto
+  const [
+    { data: asyncData, loading, error: asyncError }, 
+    { setData, setLoading, setError, reset }
+  ] = useAsyncState<PaginatedResponse<CategorySummary>>();
+  
+  // Estados locales
+  const [categories, setCategories] = useState<CategorySummary[]>([]);
+  const [paginatedData, setPaginatedData] = useState<PaginatedResponse<CategorySummary> | null>(null);
+  const [hierarchyData, setHierarchyData] = useState<CategoryHierarchy[]>([]);
+  const [byTypeData, setByTypeData] = useState<CategoriesByType | null>(null);
+  const [statisticsData, setStatisticsData] = useState<CategoryStatistics | null>(null);
+  
+  // Estados de carga específicos
+  const [isCreating, setIsCreating] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isLoadingHierarchy, setIsLoadingHierarchy] = useState(false);
+  
+  // Estado de error personalizado
+  const [error, setCustomError] = useState<string | null>(null);
+  
   // =====================================================
-  // OPERACIONES DE CARGA
+  // ACCIONES PRINCIPALES CRUD
   // =====================================================
-
-  const loadCategories = useCallback(async (filters?: CategoryFilters) => {
-    const finalFilters = filters ? { ...currentFilters, ...filters } : currentFilters;
-    setCurrentFilters(finalFilters);
-
-    const result = await execute(() => categoriesApi.getCategories(finalFilters));
-    
-    if (result) {
-      setState(prev => ({
-        ...prev,
-        categories: result.results,
-        totalCount: result.count
-      }));
+  
+  const loadCategories = useCallback(async (filters?: CategoryFilters): Promise<CategorySummary[]> => {
+    try {
+      setLoading(true);
+      setCustomError(null);
+      
+      // ERROR CORREGIDO 3: Usar métodos correctos de categoriesApi
+      const result = await categoriesApi.list(filters);
+      setCategories(result);
+      
+      initialFilters?.onSuccess?.();
+      return result;
+    } catch (err: any) {
+      const errorMessage = err.message || 'Error al cargar categorías';
+      setCustomError(errorMessage);
+      initialFilters?.onError?.(errorMessage);
+      return [];
+    } finally {
+      setLoading(false);
     }
-  }, [currentFilters, execute]);
-
-  const loadCategoriesByType = useCallback(async (): Promise<CategoriesByType> => {
-    const result = await categoriesApi.getCategoriesByType();
-    
-    setState(prev => ({
-      ...prev,
-      categoriesByType: result
-    }));
-
-    return result;
+  }, [initialFilters, setLoading]);
+  
+  const loadCategoriesPaginated = useCallback(async (
+    filters?: CategoryFilters
+  ): Promise<PaginatedResponse<CategorySummary>> => {
+    try {
+      setLoading(true);
+      setCustomError(null);
+      
+      const result = await categoriesApi.listPaginated(filters);
+      setPaginatedData(result);
+      setCategories(result.results);
+      
+      return result;
+    } catch (err: any) {
+      const errorMessage = err.message || 'Error al cargar categorías paginadas';
+      setCustomError(errorMessage);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading]);
+  
+  // ERROR CORREGIDO 1: Renombrar función para evitar conflicto de nombres
+  const loadHierarchyData = useCallback(async (): Promise<CategoryHierarchy[]> => {
+    try {
+      setIsLoadingHierarchy(true);
+      setCustomError(null);
+      
+      // ERROR CORREGIDO 3: Usar método correcto
+      const result = await categoriesApi.getHierarchy();
+      setHierarchyData(result);
+      
+      return result;
+    } catch (err: any) {
+      const errorMessage = err.message || 'Error al cargar jerarquía de categorías';
+      setCustomError(errorMessage);
+      return [];
+    } finally {
+      setIsLoadingHierarchy(false);
+    }
   }, []);
-
-  const loadHierarchy = useCallback(async (): Promise<CategoryHierarchy[]> => {
-    const result = await categoriesApi.getCategoryHierarchy();
-    
-    setState(prev => ({
-      ...prev,
-      hierarchyCategories: result
-    }));
-
-    return result;
-  }, []);
-
-  // =====================================================
-  // OPERACIONES CRUD
-  // =====================================================
-
+  
   const createCategory = useCallback(async (data: CreateCategoryData): Promise<Category> => {
-    const newCategory = await categoriesApi.createCategory(data);
-    
-    // Agregar a la lista local
-    const categorySummary: CategorySummary = {
-      id: newCategory.id,
-      name: newCategory.name,
-      icon: newCategory.icon,
-      color: newCategory.color,
-      category_type: newCategory.category_type
-    };
-
-    setState(prev => ({
-      ...prev,
-      categories: [categorySummary, ...prev.categories],
-      totalCount: prev.totalCount + 1
-    }));
-
-    return newCategory;
+    try {
+      setIsCreating(true);
+      setCustomError(null);
+      
+      // Validar datos antes de enviar
+      const validationErrors = categoriesApi.validateCategory(data);
+      if (validationErrors.length > 0) {
+        throw new Error(validationErrors.join(', '));
+      }
+      
+      // ERROR CORREGIDO 3: Usar método correcto
+      const newCategory = await categoriesApi.create(data);
+      
+      // Actualizar lista local
+      const summary = categoriesApi.toSummary(newCategory);
+      setCategories(prev => [summary, ...prev]);
+      
+      initialFilters?.onSuccess?.();
+      return newCategory;
+    } catch (err: any) {
+      const errorMessage = err.message || 'Error al crear categoría';
+      setCustomError(errorMessage);
+      throw err;
+    } finally {
+      setIsCreating(false);
+    }
+  }, [initialFilters]);
+  
+  const updateCategory = useCallback(async (
+    id: number, 
+    data: UpdateCategoryData
+  ): Promise<Category> => {
+    try {
+      setIsUpdating(true);
+      setCustomError(null);
+      
+      // ERROR CORREGIDO 3: Usar método correcto
+      const updatedCategory = await categoriesApi.update(id, data);
+      
+      // Actualizar en lista local
+      const summary = categoriesApi.toSummary(updatedCategory);
+      setCategories(prev => 
+        prev.map(cat => cat.id === id ? summary : cat)
+      );
+      
+      return updatedCategory;
+    } catch (err: any) {
+      const errorMessage = err.message || 'Error al actualizar categoría';
+      setCustomError(errorMessage);
+      throw err;
+    } finally {
+      setIsUpdating(false);
+    }
   }, []);
-
-  const updateCategory = useCallback(async (id: number, data: UpdateCategoryData): Promise<Category> => {
-    const updatedCategory = await categoriesApi.updateCategory(id, data);
-    
-    // Actualizar en la lista local
-    setState(prev => ({
-      ...prev,
-      categories: prev.categories.map(c => 
-        c.id === id 
-          ? {
-              ...c,
-              name: updatedCategory.name,
-              icon: updatedCategory.icon,
-              color: updatedCategory.color,
-              category_type: updatedCategory.category_type
-            }
-          : c
-      ),
-      selectedCategory: prev.selectedCategory?.id === id ? updatedCategory : prev.selectedCategory
-    }));
-
-    return updatedCategory;
+  
+  // ERROR CORREGIDO 4: Usar método correcto (delete en lugar de deleteCategory)
+  const deleteCategory = useCallback(async (id: number): Promise<boolean> => {
+    try {
+      setIsDeleting(true);
+      setCustomError(null);
+      
+      // Verificar si se puede eliminar
+      const canDelete = await categoriesApi.canDeleteCategory(id);
+      if (!canDelete.canDelete) {
+        throw new Error(canDelete.reason);
+      }
+      
+      // ERROR CORREGIDO 4: Usar método correcto
+      await categoriesApi.delete(id);
+      
+      // Remover de lista local
+      setCategories(prev => prev.filter(cat => cat.id !== id));
+      
+      return true;
+    } catch (err: any) {
+      const errorMessage = err.message || 'Error al eliminar categoría';
+      setCustomError(errorMessage);
+      return false;
+    } finally {
+      setIsDeleting(false);
+    }
   }, []);
-
-  const deleteCategory = useCallback(async (id: number): Promise<void> => {
-    await categoriesApi.deleteCategory(id);
-    
-    // Remover de la lista local
-    setState(prev => ({
-      ...prev,
-      categories: prev.categories.filter(c => c.id !== id),
-      totalCount: Math.max(0, prev.totalCount - 1),
-      selectedCategory: prev.selectedCategory?.id === id ? null : prev.selectedCategory
-    }));
-  }, []);
-
-  const getCategory = useCallback(async (id: number): Promise<Category> => {
-    const category = await categoriesApi.getCategory(id);
-    
-    setState(prev => ({
-      ...prev,
-      selectedCategory: category
-    }));
-
-    return category;
-  }, []);
-
+  
   // =====================================================
-  // OPERACIONES ESPECIALES
+  // ACCIONES ESPECÍFICAS CUSTOM
   // =====================================================
-
+  
+  const loadByType = useCallback(async (): Promise<CategoriesByType> => {
+    try {
+      setLoading(true);
+      const result = await categoriesApi.getByType();
+      setByTypeData(result);
+      return result;
+    } catch (err: any) {
+      setCustomError(err.message || 'Error al cargar categorías por tipo');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading]);
+  
+  const loadStatistics = useCallback(async (
+    startDate?: string, 
+    endDate?: string
+  ): Promise<CategoryStatistics> => {
+    try {
+      setLoading(true);
+      const result = await categoriesApi.getStatistics(startDate, endDate);
+      setStatisticsData(result);
+      return result;
+    } catch (err: any) {
+      setCustomError(err.message || 'Error al cargar estadísticas');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading]);
+  
   const getCategoryTransactions = useCallback(async (
     id: number, 
-    startDate?: string, 
-    endDate?: string, 
-    limit?: number
+    filters?: { start_date?: string; end_date?: string; limit?: number }
   ): Promise<CategoryTransactionsResult> => {
-    return await categoriesApi.getCategoryTransactions(id, { 
-      start_date: startDate, 
-      end_date: endDate, 
-      limit 
-    });
+    try {
+      // ERROR CORREGIDO 3: Usar método correcto
+      return await categoriesApi.getTransactions(id, filters);
+    } catch (err: any) {
+      setCustomError(err.message || 'Error al obtener transacciones de categoría');
+      throw err;
+    }
   }, []);
-
+  
   const getCategoryTrend = useCallback(async (id: number): Promise<CategoryMonthlyTrend> => {
-    return await categoriesApi.getCategoryTrend(id);
+    try {
+      // ERROR CORREGIDO 3: Usar método correcto
+      return await categoriesApi.getMonthlyTrend(id);
+    } catch (err: any) {
+      setCustomError(err.message || 'Error al obtener tendencia de categoría');
+      throw err;
+    }
   }, []);
-
-  const getCategoryStatistics = useCallback(async (startDate?: string, endDate?: string): Promise<CategoryStatistics> => {
-    return await categoriesApi.getCategoryStatistics({ 
-      start_date: startDate, 
-      end_date: endDate 
-    });
-  }, []);
-
-  const createDefaultCategories = useCallback(async (): Promise<{ message: string; total_categories: number }> => {
-    const result = await categoriesApi.createDefaultCategories();
-    
-    // Recargar categorías después de crear las predeterminadas
-    await loadCategories();
-    
-    return result;
+  
+  const createDefaultCategories = useCallback(async (): Promise<{ 
+    message: string; 
+    total_categories: number 
+  }> => {
+    try {
+      setIsCreating(true);
+      // ERROR CORREGIDO 3: Usar método correcto
+      const result = await categoriesApi.createDefaults();
+      
+      // Recargar categorías después de crear defaults
+      await loadCategories();
+      
+      return result;
+    } catch (err: any) {
+      setCustomError(err.message || 'Error al crear categorías predeterminadas');
+      throw err;
+    } finally {
+      setIsCreating(false);
+    }
   }, [loadCategories]);
-
-  // =====================================================
-  // HELPERS ESPECÍFICOS
-  // =====================================================
-
-  const getCategoryById = useCallback((id: number): CategorySummary | null => {
-    return state.categories.find(c => c.id === id) || null;
-  }, [state.categories]);
-
-  const getSubcategories = useCallback((parentId: number): CategorySummary[] => {
-    // Esta función requiere datos de jerarquía cargados
-    const parentCategory = state.hierarchyCategories.find(c => c.id === parentId);
-    return parentCategory?.subcategories || [];
-  }, [state.hierarchyCategories]);
-
-  const getParentCategories = useCallback((): CategorySummary[] => {
-    // Categorías sin parent (categorías padre)
-    return state.categories.filter(c => 
-      !state.categories.some(parent => 
-        parent.id !== c.id // Evitar auto-referencia
-      )
-    );
-  }, [state.categories]);
-
-  const filterCategoriesByType = useCallback((type: 'income' | 'expense' | 'both'): CategorySummary[] => {
-    return state.categories.filter(c => 
-      c.category_type === type || c.category_type === 'both'
-    );
-  }, [state.categories]);
-
+  
   // =====================================================
   // UTILIDADES
   // =====================================================
-
-  const refreshCategories = useCallback(async () => {
-    await loadCategories(currentFilters);
-    if (loadHierarchy) {
-      await loadHierarchy();
-    }
-  }, [loadCategories, currentFilters, loadHierarchy]);
-
-  const setSelectedCategory = useCallback((category: Category | null) => {
-    setState(prev => ({
-      ...prev,
-      selectedCategory: category
-    }));
+  
+  const refreshCategories = useCallback(async (): Promise<void> => {
+    await loadCategories(initialFilters);
+  }, [loadCategories, initialFilters]);
+  
+  const clearError = useCallback((): void => {
+    setCustomError(null);
+    reset();
+  }, [reset]);
+  
+  const findCategoryById = useCallback((id: number): CategorySummary | undefined => {
+    return categories.find(cat => cat.id === id);
+  }, [categories]);
+  
+  const filterCategories = useCallback((query: string): CategorySummary[] => {
+    if (!query.trim()) return categories;
+    
+    const searchQuery = query.toLowerCase();
+    return categories.filter(category =>
+      category.name.toLowerCase().includes(searchQuery)
+    );
+  }, [categories]);
+  
+  const canDelete = useCallback(async (
+    id: number
+  ): Promise<{ canDelete: boolean; reason?: string }> => {
+    return await categoriesApi.canDeleteCategory(id);
   }, []);
-
+  
   // =====================================================
   // EFECTOS
   // =====================================================
-
+  
+  // Auto-cargar categorías si se especifica
   useEffect(() => {
-    if (autoLoad) {
-      loadCategories();
+    if (initialFilters?.autoLoad !== false) {
+      loadCategories(initialFilters);
     }
-  }, [autoLoad]);
-
+  }, [loadCategories, initialFilters]);
+  
+  // Auto-cargar jerarquía si se especifica
   useEffect(() => {
-    if (loadHierarchy && autoLoad) {
-      loadHierarchy();
+    if (initialFilters?.autoLoad && initialFilters.loadHierarchy) {
+      loadHierarchyData();
     }
-  }, [loadHierarchy, autoLoad]);
-
+  }, [loadHierarchyData, initialFilters]);
+  
   // =====================================================
   // RETURN
   // =====================================================
-
+  
   return {
-    // Estado
-    data: state,
-    isLoading,
-    error,
+    // Estado principal
+    categories,
+    isLoading: loading,
+    error: error || asyncError,
     
-    // CRUD
+    // Paginación
+    paginatedData,
+    
+    // Estados específicos
+    hierarchyData,
+    byTypeData,
+    statisticsData,
+    
+    // Estados de carga específicos
+    isCreating,
+    isUpdating,
+    isDeleting,
+    isLoadingHierarchy,
+    
+    // Acciones principales CRUD
     loadCategories,
+    loadCategoriesPaginated,
     createCategory,
     updateCategory,
     deleteCategory,
-    getCategory,
     
-    // Especiales
-    loadCategoriesByType,
-    loadHierarchy,
+    // Acciones específicas custom
+    loadHierarchy: loadHierarchyData,  // ERROR CORREGIDO 1: Usar función renombrada
+    loadByType,
+    loadStatistics,
     getCategoryTransactions,
     getCategoryTrend,
-    getCategoryStatistics,
     createDefaultCategories,
     
     // Utilidades
     refreshCategories,
     clearError,
-    setSelectedCategory,
-    
-    // Helpers
-    getCategoryById,
-    getSubcategories,
-    getParentCategories,
-    filterCategoriesByType
+    findCategoryById,
+    filterCategories,
+    canDelete,
+  };
+};
+
+// =====================================================
+// HOOKS ESPECIALIZADOS
+// =====================================================
+
+/**
+ * Hook para cargar solo categorías padre
+ */
+export const useParentCategories = () => {
+  return useCategories({
+    parent: null,
+    autoLoad: true,
+  });
+};
+
+/**
+ * Hook para cargar categorías por tipo
+ */
+export const useCategoriesByType = (categoryType?: 'income' | 'expense' | 'both') => {
+  return useCategories({
+    category_type: categoryType,
+    autoLoad: true,
+  });
+};
+
+/**
+ * Hook para cargar jerarquía completa
+ */
+export const useCategoryHierarchy = () => {
+  const hook = useCategories({
+    autoLoad: false,
+    loadHierarchy: true,
+  });
+  
+  useEffect(() => {
+    hook.loadHierarchy();
+  }, []);
+  
+  return {
+    hierarchy: hook.hierarchyData,
+    isLoading: hook.isLoadingHierarchy,
+    error: hook.error,
+    refresh: hook.loadHierarchy,
+  };
+};
+
+/**
+ * Hook para una categoría específica con sus transacciones
+ */
+export const useCategoryWithTransactions = (categoryId: number) => {
+  const [category, setCategory] = useState<Category | null>(null);
+  const [transactions, setTransactions] = useState<CategoryTransactionsResult | null>(null);
+  const [trend, setTrend] = useState<CategoryMonthlyTrend | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  const loadCategoryData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Cargar datos en paralelo
+      const [categoryData, transactionsData, trendData] = await Promise.all([
+        categoriesApi.get(categoryId),
+        categoriesApi.getTransactions(categoryId),
+        categoriesApi.getMonthlyTrend(categoryId),
+      ]);
+      
+      setCategory(categoryData);
+      setTransactions(transactionsData);
+      setTrend(trendData);
+    } catch (err: any) {
+      setError(err.message || 'Error al cargar datos de categoría');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [categoryId]);
+  
+  useEffect(() => {
+    if (categoryId) {
+      loadCategoryData();
+    }
+  }, [categoryId, loadCategoryData]);
+  
+  return {
+    category,
+    transactions,
+    trend,
+    isLoading,
+    error,
+    refresh: loadCategoryData,
   };
 };
 

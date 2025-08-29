@@ -17,7 +17,6 @@ import {
   CategoryTransactionsResult,
   CategoryMonthlyTrend,
   CategoryStatistics,
-  TransactionSummary
 } from '../types/transactions.types';
 import { PaginatedResponse } from '@/types/api.types';
 
@@ -43,7 +42,7 @@ export const categoriesApi = {
     return await apiClient.post<Category>(TRANSACTIONS_ENDPOINTS.CATEGORIES, data);
   },
 
-  retrieve: async (id: number): Promise<Category> => {
+  get: async (id: number): Promise<Category> => {
     return await apiClient.get<Category>(TRANSACTIONS_ENDPOINTS.CATEGORY_DETAIL(id));
   },
 
@@ -223,7 +222,7 @@ export const categoriesApi = {
   // ✅ Validación de jerarquías
   canDeleteCategory: async (id: number): Promise<{ canDelete: boolean; reason?: string }> => {
     try {
-      const category = await categoriesApi.retrieve(id);
+      const category = await categoriesApi.get(id);
       
       // Verificar si tiene subcategorías
       if (category.subcategories && category.subcategories.length > 0) {
