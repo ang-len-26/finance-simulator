@@ -1,14 +1,13 @@
 // =====================================================
 // API ENDPOINTS - URLs reales del backend Django
-// Actualizado: Auth (Rama 1) + Accounts (Rama 2) + Transactions (Rama 3) + Analytics (Rama 4)
+// Actualizado: Auth (Rama 1) + Accounts (Rama 2) + Transactions (Rama 3) + Analytics (Rama 4) + Goals (Rama 5)
 // =====================================================
 
 // Base API URL
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 // =====================================================
-// AUTH ENDPOINTS (RAMA 1 - COMPLETADO)
-// Basado en auth/urls.py y views.py reales del backend
+// AUTH ENDPOINTS (RAMA 1 - COMPLETADO ✅)
 // =====================================================
 export const AUTH_ENDPOINTS = {
   // JWT Authentication (django-rest-framework-simplejwt)
@@ -30,8 +29,8 @@ export const SETUP_ENDPOINTS = {
 } as const;
 
 // =====================================================
-// ACCOUNTS ENDPOINTS (RAMA 2 - COMPLETADO)
-// Basado en accounts/urls.py y views.py reales del backend
+// ACCOUNTS ENDPOINTS (RAMA 2 - COMPLETADO ✅)
+// Basado en AccountViewSet real del backend
 // =====================================================
 export const ACCOUNTS_ENDPOINTS = {
   // Accounts CRUD
@@ -46,8 +45,8 @@ export const ACCOUNTS_ENDPOINTS = {
 } as const;
 
 // =====================================================
-// TRANSACTIONS ENDPOINTS (RAMA 3 - COMPLETADO)
-// Basado en transactions/urls.py y views.py reales del backend
+// TRANSACTIONS ENDPOINTS (RAMA 3 - COMPLETADO ✅)
+// Basado en urls.py y views.py reales del backend
 // =====================================================
 export const TRANSACTIONS_ENDPOINTS = {
   // ✅ Transactions CRUD (TransactionViewSet)
@@ -81,54 +80,57 @@ export const TRANSACTIONS_ENDPOINTS = {
 } as const;
 
 // =====================================================
-// ANALYTICS ENDPOINTS (RAMA 4 - COMPLETADO)
-// Basado en analytics/urls.py y views.py reales del backend
+// ANALYTICS ENDPOINTS (RAMA 4 - COMPLETADO ✅)
+// Basado en ReportsViewSet real del backend
 // =====================================================
 export const ANALYTICS_ENDPOINTS = {
-  // ✅ Reports CRUD (ReportsViewSet)
-  REPORTS: '/reports/',                                        // GET, POST - Métricas financieras CRUD
-  REPORT_DETAIL: (id: number) => `/reports/${id}/`,           // GET, PUT, PATCH, DELETE - Métrica específica
-  
-  // ✅ Dashboard y métricas principales (@action methods)
-  REPORTS_METRICS: '/reports/metrics/',                        // GET - Métricas principales + comparativas (4 tarjetas superiores)
-  REPORTS_INCOME_VS_EXPENSES: '/reports/income-vs-expenses/',  // GET - Gráfico ingresos vs gastos mensuales (12 meses)
-  REPORTS_BALANCE_TIMELINE: '/reports/balance-timeline/',      // GET - Timeline balance acumulado día por día
-  REPORTS_CATEGORY_DISTRIBUTION: '/reports/category-distribution/', // GET - Distribución gastos por categoría (pie/dona)
-  REPORTS_TOP_CATEGORIES: '/reports/top-categories/',          // GET - Top 5 categorías con detalles y tendencias
-  REPORTS_RECENT_TRANSACTIONS: '/reports/recent-transactions/', // GET - Transacciones recientes con íconos
-  REPORTS_FINANCIAL_METRICS: '/reports/financial-metrics/',   // GET - Métricas precalculadas por período
-  
-  // ✅ Sistema de alertas (@action methods)
-  REPORTS_ALERTS: '/reports/alerts/',                          // GET - Alertas de presupuesto con filtros
-  REPORTS_MARK_ALERT_READ: '/reports/mark-alert-read/',        // POST - Marcar alertas como leídas (bulk)
-  
-  // ✅ Análisis avanzado (@action methods)
-  REPORTS_CATEGORY_TRENDS: '/reports/category-trends/',        // GET - Tendencias de categorías en tiempo (6-8 períodos)
-  
-  // ✅ Endpoints independientes (function-based views)
-  REPORTS_OVERVIEW: '/reports-overview/',                      // GET - Dashboard completo en una sola llamada
-  FINANCIAL_RATIOS: '/financial-ratios/',                      // GET - Ratios financieros profesionales + recomendaciones
+  // ✅ Reports ViewSet (@action methods)
+  REPORTS_DASHBOARD: '/reports/dashboard/',                    // GET - Dashboard completo de analytics
+  REPORTS_INCOME_VS_EXPENSES: '/reports/income_vs_expenses/', // GET - Ingresos vs gastos por período
+  REPORTS_CATEGORY_DISTRIBUTION: '/reports/category_distribution/', // GET - Distribución por categorías
+  REPORTS_BALANCE_TIMELINE: '/reports/balance_timeline/',     // GET - Timeline de balances
+  REPORTS_TOP_CATEGORIES: '/reports/top_categories/',         // GET - Top categorías por gasto
+  REPORTS_MONTHLY_SUMMARY: '/reports/monthly_summary/',       // GET - Resumen mensual
+  REPORTS_YEARLY_COMPARISON: '/reports/yearly_comparison/',   // GET - Comparación año anterior
+  REPORTS_CASH_FLOW: '/reports/cash_flow/',                   // GET - Flujo de efectivo
+  REPORTS_ACCOUNT_PERFORMANCE: '/reports/account_performance/', // GET - Rendimiento por cuenta
+  REPORTS_FINANCIAL_HEALTH: '/reports/financial_health/',     // GET - Indicadores de salud financiera
 } as const;
 
 // =====================================================
-// GOALS ENDPOINTS (PENDIENTE RAMA 5)
+// GOALS ENDPOINTS (RAMA 5 - COMPLETADO ✅)
+// Basado en urls.py y views.py reales del backend de goals
 // =====================================================
 export const GOALS_ENDPOINTS = {
-  // Goals CRUD (POR CONFIRMAR)
-  GOALS: '/goals/',                              // GET, POST - Lista y crear metas
-  GOAL_DETAIL: (id: number) => `/goals/${id}/`, // GET, PUT, PATCH, DELETE
+  // ✅ Goals CRUD (FinancialGoalViewSet)
+  GOALS: '/goals/',                                            // GET, POST - Lista y crear metas
+  GOAL_DETAIL: (id: number) => `/goals/${id}/`,              // GET, PUT, PATCH, DELETE
   
-  // Goal Contributions (POR CONFIRMAR)
-  CONTRIBUTIONS: '/goal-contributions/',         // GET, POST - Contribuciones
-  CONTRIBUTION_DETAIL: (id: number) => `/goal-contributions/${id}/`,
+  // ✅ Goal custom actions (@action del ViewSet)
+  GOALS_DASHBOARD: '/goals/dashboard/',                        // GET - Dashboard completo de metas
+  GOALS_SUMMARY: '/goals/summary/',                           // GET - Resumen rápido para widgets
+  GOAL_ADD_CONTRIBUTION: (id: number) => `/goals/${id}/add_contribution/`, // POST - Agregar contribución
+  GOAL_CONTRIBUTIONS: (id: number) => `/goals/${id}/contributions/`,       // GET - Ver contribuciones de meta
+  GOAL_ADD_MILESTONE: (id: number) => `/goals/${id}/add_milestone/`,       // POST - Agregar hito
+  GOAL_PAUSE: (id: number) => `/goals/${id}/pause/`,                       // POST - Pausar meta
+  GOAL_RESUME: (id: number) => `/goals/${id}/resume/`,                     // POST - Reanudar meta
+  GOAL_COMPLETE: (id: number) => `/goals/${id}/complete/`,                 // POST - Completar meta manualmente
+  GOAL_ANALYTICS: (id: number) => `/goals/${id}/analytics/`,               // GET - Análisis detallado de meta
   
-  // Goal Templates (POR CONFIRMAR)
-  TEMPLATES: '/goal-templates/',                 // GET - Plantillas de metas
-  TEMPLATE_DETAIL: (id: number) => `/goal-templates/${id}/`,
+  // ✅ Goal Contributions CRUD (GoalContributionViewSet)
+  CONTRIBUTIONS: '/goal-contributions/',                       // GET, POST - Lista y crear contribuciones
+  CONTRIBUTION_DETAIL: (id: number) => `/goal-contributions/${id}/`, // GET, PUT, PATCH, DELETE
   
-  // Goal specific actions (POR CONFIRMAR)
-  GOAL_PROGRESS: '/goals/progress/',             // GET - Progreso de metas
-  GOAL_INSIGHTS: '/goals/insights/',             // GET - Insights de metas
+  // ✅ Goal Templates (GoalTemplateViewSet - ReadOnly)
+  TEMPLATES: '/goal-templates/',                               // GET - Lista plantillas
+  TEMPLATE_DETAIL: (id: number) => `/goal-templates/${id}/`,  // GET - Plantilla específica
+  TEMPLATE_CREATE_GOAL: (id: number) => `/goal-templates/${id}/create_goal/`, // POST - Crear meta desde plantilla
+  TEMPLATES_BY_CATEGORY: '/goal-templates/by_category/',       // GET - Plantillas agrupadas por tipo
+  
+  // ✅ Utility endpoints (@api_view functions)
+  SETUP_TEMPLATES: '/setup/create-goal-templates/',           // POST - Crear plantillas predeterminadas
+  GOALS_CALENDAR: '/goals-calendar/',                         // GET - Vista calendario (?year=2024&month=12)
+  GOALS_INSIGHTS: '/goals-insights/',                         // GET - Insights inteligentes sobre metas
 } as const;
 
 // =====================================================
@@ -191,7 +193,7 @@ export const isValidEndpoint = (endpoint: string): boolean => {
     ...Object.values(SETUP_ENDPOINTS),
     ...Object.values(ACCOUNTS_ENDPOINTS).filter(ep => typeof ep === 'string'),
     ...Object.values(TRANSACTIONS_ENDPOINTS).filter(ep => typeof ep === 'string'),
-    ...Object.values(ANALYTICS_ENDPOINTS).filter(ep => typeof ep === 'string'),
+    ...Object.values(ANALYTICS_ENDPOINTS),
     ...Object.values(GOALS_ENDPOINTS).filter(ep => typeof ep === 'string'),
   ];
   
@@ -217,10 +219,10 @@ export const ENDPOINT_GROUPS = {
     TRANSACTIONS_ENDPOINTS.TRANSACTIONS,
     TRANSACTIONS_ENDPOINTS.CATEGORIES,
     TRANSACTIONS_ENDPOINTS.BUDGET_ALERTS,
-    ANALYTICS_ENDPOINTS.REPORTS,
-    ANALYTICS_ENDPOINTS.REPORTS_OVERVIEW,
-    ANALYTICS_ENDPOINTS.FINANCIAL_RATIOS,
+    ANALYTICS_ENDPOINTS.REPORTS_DASHBOARD,
     GOALS_ENDPOINTS.GOALS,
+    GOALS_ENDPOINTS.CONTRIBUTIONS,
+    GOALS_ENDPOINTS.TEMPLATES,
   ],
   
   ADMIN_ONLY: [
@@ -230,105 +232,7 @@ export const ENDPOINT_GROUPS = {
 } as const;
 
 // =====================================================
-// ANALYTICS SPECIFIC HELPERS (RAMA 4)
-// =====================================================
-
-/**
- * Construir filtros de analytics para query params
- */
-export const buildAnalyticsFilters = (filters: Record<string, any>): Record<string, any> => {
-  const cleanFilters: Record<string, any> = {};
-  
-  // Mapear filtros específicos de analytics
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') {
-      switch (key) {
-        // Períodos
-        case 'periodType':
-          cleanFilters.period_type = value;
-          break;
-        case 'period':
-          cleanFilters.period = value; // monthly, quarterly, yearly, custom, last_30_days, last_90_days
-          break;
-        case 'startDate':
-          cleanFilters.start_date = value;
-          break;
-        case 'endDate':
-          cleanFilters.end_date = value;
-          break;
-        
-        // Alertas
-        case 'severity':
-          cleanFilters.severity = value; // low, medium, high, critical
-          break;
-        case 'alertType':
-          cleanFilters.alert_type = value; // budget_exceeded, unusual_expense, income_drop, account_low, category_spike
-          break;
-        case 'isRead':
-          cleanFilters.is_read = value;
-          break;
-        case 'includeDismissed':
-          cleanFilters.include_dismissed = value;
-          break;
-        
-        // Filtros de datos
-        case 'limit':
-          cleanFilters.limit = value;
-          break;
-        case 'categoryId':
-          cleanFilters.category = value;
-          break;
-        case 'accountId':
-          cleanFilters.account = value;
-          break;
-        
-        // Campos directos
-        default:
-          cleanFilters[key] = value;
-      }
-    }
-  });
-  
-  return cleanFilters;
-};
-
-/**
- * Construir parámetros para reportes con períodos predefinidos
- */
-export const buildReportPeriodParams = (period: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'last_30_days' | 'last_90_days' | 'custom', customDates?: { start: string; end: string }): Record<string, any> => {
-  const params: Record<string, any> = { period };
-  
-  if (period === 'custom' && customDates) {
-    params.start_date = customDates.start;
-    params.end_date = customDates.end;
-  }
-  
-  return params;
-};
-
-/**
- * Construir parámetros para alertas con filtros comunes
- */
-export const buildAlertParams = (filters: {
-  severity?: 'low' | 'medium' | 'high' | 'critical';
-  alertType?: 'budget_exceeded' | 'unusual_expense' | 'income_drop' | 'account_low' | 'category_spike';
-  unreadOnly?: boolean;
-  includeDismissed?: boolean;
-  limit?: number;
-}): Record<string, any> => {
-  const params: Record<string, any> = {};
-  
-  if (filters.severity) params.severity = filters.severity;
-  if (filters.alertType) params.alert_type = filters.alertType;
-  if (filters.unreadOnly) params.is_read = 'false';
-  if (filters.includeDismissed !== undefined) params.include_dismissed = filters.includeDismissed;
-  if (filters.limit) params.limit = filters.limit;
-  
-  return params;
-};
-
-// =====================================================
-// TRANSACTIONS SPECIFIC HELPERS (RAMA 3)
+// TRANSACTIONS SPECIFIC HELPERS (RAMA 3 - COMPLETADO ✅)
 // =====================================================
 
 /**
@@ -444,7 +348,7 @@ export const buildCategoryFilters = (filters: Record<string, any>): Record<strin
 };
 
 // =====================================================
-// ACCOUNTS SPECIFIC HELPERS (RAMA 2)
+// ACCOUNTS SPECIFIC HELPERS (RAMA 2 - COMPLETADO ✅)
 // =====================================================
 
 /**
@@ -488,7 +392,165 @@ export const buildAccountFilters = (filters: Record<string, any>): Record<string
 };
 
 // =====================================================
-// AUTH SPECIFIC HELPERS (RAMA 1)
+// GOALS SPECIFIC HELPERS (RAMA 5 - NUEVO ✅)
+// =====================================================
+
+/**
+ * Construir filtros de goals para query params
+ */
+export const buildGoalFilters = (filters: Record<string, any>): Record<string, any> => {
+  const cleanFilters: Record<string, any> = {};
+  
+  // Mapear filtros específicos de goals según FinancialGoalFilter
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      switch (key) {
+        // Montos
+        case 'minTargetAmount':
+          cleanFilters.min_target_amount = value;
+          break;
+        case 'maxTargetAmount':
+          cleanFilters.max_target_amount = value;
+          break;
+        case 'minCurrentAmount':
+          cleanFilters.min_current_amount = value;
+          break;
+        case 'maxCurrentAmount':
+          cleanFilters.max_current_amount = value;
+          break;
+        
+        // Fechas
+        case 'startDateAfter':
+          cleanFilters.start_date_after = value;
+          break;
+        case 'startDateBefore':
+          cleanFilters.start_date_before = value;
+          break;
+        case 'targetDateAfter':
+          cleanFilters.target_date_after = value;
+          break;
+        case 'targetDateBefore':
+          cleanFilters.target_date_before = value;
+          break;
+        
+        // Cuenta asociada
+        case 'associatedAccount':
+          cleanFilters.associated_account = value;
+          break;
+        case 'bankName':
+          cleanFilters.bank = value;
+          break;
+        
+        // Progreso
+        case 'minProgress':
+          cleanFilters.min_progress = value;
+          break;
+        case 'maxProgress':
+          cleanFilters.max_progress = value;
+          break;
+        
+        // Tiempo restante
+        case 'daysRemainingLess':
+          cleanFilters.days_remaining_less_than = value;
+          break;
+        case 'daysRemainingMore':
+          cleanFilters.days_remaining_more_than = value;
+          break;
+        
+        // Booleanos
+        case 'isOverdue':
+          cleanFilters.is_overdue = value;
+          break;
+        case 'hasContributions':
+          cleanFilters.has_contributions = value;
+          break;
+        case 'isOnTrack':
+          cleanFilters.is_on_track = value;
+          break;
+        case 'enableReminders':
+          cleanFilters.enable_reminders = value;
+          break;
+        
+        // Categorías relacionadas
+        case 'relatedCategory':
+          cleanFilters.related_category = value;
+          break;
+        
+        // Campos directos
+        default:
+          cleanFilters[key] = value;
+      }
+    }
+  });
+  
+  return cleanFilters;
+};
+
+/**
+ * Construir filtros de contributions para query params
+ */
+export const buildContributionFilters = (filters: Record<string, any>): Record<string, any> => {
+  const cleanFilters: Record<string, any> = {};
+  
+  // Mapear filtros específicos de contributions según GoalContributionFilter
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      switch (key) {
+        // Relaciones
+        case 'goalId':
+          cleanFilters.goal = value;
+          break;
+        case 'goalTitle':
+          cleanFilters.goal_title = value;
+          break;
+        case 'fromAccount':
+          cleanFilters.from_account = value;
+          break;
+        case 'bankName':
+          cleanFilters.bank = value;
+          break;
+        
+        // Montos
+        case 'minAmount':
+          cleanFilters.min_amount = value;
+          break;
+        case 'maxAmount':
+          cleanFilters.max_amount = value;
+          break;
+        
+        // Fechas
+        case 'dateAfter':
+          cleanFilters.date_after = value;
+          break;
+        case 'dateBefore':
+          cleanFilters.date_before = value;
+          break;
+        
+        // Tipo de contribución
+        case 'contributionType':
+          cleanFilters.contribution_type = value;
+          break;
+        
+        // Booleanos
+        case 'isRecurring':
+          cleanFilters.is_recurring = value;
+          break;
+        case 'hasTransaction':
+          cleanFilters.has_transaction = value;
+          break;
+        
+        // Campos directos
+        default:
+          cleanFilters[key] = value;
+      }
+    }
+  });
+  
+  return cleanFilters;
+};
+
+// =====================================================
+// HELPER FUNCTIONS
 // =====================================================
 
 /**

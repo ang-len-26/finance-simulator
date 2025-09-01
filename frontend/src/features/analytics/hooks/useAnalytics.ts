@@ -5,9 +5,9 @@ import {
   ChartData, 
   AnalyticsFilters,
   CategorySummary,
-  PeriodType
+  PeriodType,
+  RecentTransaction,
 } from '../types/analytics.types';
-import { Transaction } from "@/features/transactions/types/transactions.types";
 import { useApi } from '@/hooks/useApi';
 
 // =====================================================
@@ -34,7 +34,7 @@ interface AnalyticsState {
   // Insights
   insights: {
     top_categories: CategorySummary[];
-    recent_transactions: Transaction[];
+    recent_transactions: RecentTransaction[];
     balance_summary: any;
   };
   
