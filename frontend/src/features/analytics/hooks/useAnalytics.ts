@@ -1,15 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import analyticsApi from "../services/analyticsApi";
-import { 
-  FinancialMetric, 
+import {  
   BudgetAlert, 
   ChartData, 
   AnalyticsFilters,
-  ReportsOverview,
-  TopCategory,
-  RecentTransaction,
-  ReportPeriod
+  CategorySummary,
+  PeriodType
 } from '../types/analytics.types';
+import { Transaction } from "@/features/transactions/types/transactions.types";
 import { useApi } from '@/hooks/useApi';
 
 // =====================================================
@@ -35,13 +33,13 @@ interface AnalyticsState {
   
   // Insights
   insights: {
-    top_categories: TopCategory[],
-    recent_transactions: RecentTransaction[],
+    top_categories: CategorySummary[];
+    recent_transactions: Transaction[];
     balance_summary: any;
   };
   
   // Período actual
-  period: ReportPeriod | null;
+  period: string | null;
   
   // Estados de carga
   loading: {
@@ -58,7 +56,7 @@ interface AnalyticsState {
 }
 
 interface UseAnalyticsOptions {
-  period?: string;
+  period?: PeriodType;
   autoRefresh?: boolean;
   refreshInterval?: number;
 }
@@ -105,7 +103,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}) => {
   const [error, setError] = useState<string | null>(null);
 
   // Hook genérico para API calls
-  const { loading: apiLoading, error: apiError } = useApi();
+  const { loading: apiLoading, error: apiError } = useApi(async () => {});
 
   // =====================================================
   // MÉTODOS PRINCIPALES
@@ -125,9 +123,19 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}) => {
     try {
       const data = await analyticsApi.getMetrics(currentFilters);
       
+      // Convertir datos del API al formato esperado
+      const metricsData = {
+        total_income: parseFloat(data.metrics.total_income),
+        total_expenses: parseFloat(data.metrics.total_expenses),
+        net_balance: parseFloat(data.metrics.net_balance),
+        transaction_count: data.metrics.transaction_count,
+        income_change: data.comparison?.income_change || 0,
+        expense_change: data.comparison?.expense_change || 0,
+      };
+      
       setState(prev => ({
         ...prev,
-        metrics: data.metrics,
+        metrics: metricsData,
         period: data.period,
         loading: { ...prev.loading, metrics: false }
       }));
@@ -156,7 +164,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}) => {
 
     try {
       const [incomeVsExpenses, balanceTimeline, categoryDistribution] = await Promise.all([
-        analyticsApi.getIncomeVsExpenses(currentFilters),
+        analyticsApi.getIncomeVsExpenses(),
         analyticsApi.getBalanceTimeline(currentFilters),
         analyticsApi.getCategoryDistribution(currentFilters)
       ]);
@@ -196,7 +204,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}) => {
     try {
       const [topCategories, recentTransactions] = await Promise.all([
         analyticsApi.getTopCategories(currentFilters),
-        analyticsApi.getRecentTransactions({ limit: 5 })
+        analyticsApi.getRecentTransactions(5)
       ]);
 
       setState(prev => ({
@@ -204,7 +212,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}) => {
         insights: {
           top_categories: topCategories.categories,
           recent_transactions: recentTransactions.transactions,
-          balance_summary: null // Se carga con balance timeline
+          balance_summary: null
         },
         loading: { ...prev.loading, insights: false }
       }));
@@ -234,12 +242,30 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}) => {
     try {
       const overview = await analyticsApi.getReportsOverview(currentFilters);
       
+      // Convertir datos del ReportsOverview al formato esperado
+      const metricsData = {
+        total_income: parseFloat(overview.metrics.total_income),
+        total_expenses: parseFloat(overview.metrics.total_expenses),
+        net_balance: parseFloat(overview.metrics.net_balance),
+        transaction_count: overview.metrics.transaction_count,
+        income_change: 0, // No disponible en ReportsOverview
+        expense_change: 0, // No disponible en ReportsOverview
+      };
+
       setState(prev => ({
         ...prev,
-        metrics: overview.metrics,
-        charts: overview.charts,
-        insights: overview.insights,
-        period: overview.period,
+        metrics: metricsData,
+        charts: {
+          income_vs_expenses: overview.income_vs_expenses,
+          balance_timeline: overview.balance_timeline,
+          category_distribution: overview.category_distribution
+        },
+        insights: {
+          top_categories: overview.top_categories,
+          recent_transactions: overview.recent_transactions,
+          balance_summary: null
+        },
+        period: overview.metrics.period_label,
         loading: { ...prev.loading, overview: false }
       }));
       
@@ -258,9 +284,13 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}) => {
    * Cargar alertas de presupuesto
    */
   const loadAlerts = useCallback(async (alertFilters?: {
-    severity?: string;
-    alert_type?: string;
-    is_read?: boolean;
+    severity?: 'low' | 'medium' | 'high';
+	alert_type?: 'budget_exceeded' | 'goal_behind' | 'unusual_expense' | 'low_balance';
+	is_read?: boolean;
+	created_after?: string;
+	created_before?: string;
+	category?: number;
+	account?: number;
   }) => {
     setState(prev => ({
       ...prev,
@@ -273,7 +303,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}) => {
       setState(prev => ({
         ...prev,
         alerts: alertsData.alerts,
-        unreadAlertsCount: alertsData.summary.unread_count,
+        unreadAlertsCount: alertsData.summary?.unread_count || 0,
         alertsLoading: false
       }));
       
@@ -331,7 +361,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}) => {
   /**
    * Cambiar período y recargar
    */
-  const changePeriod = useCallback(async (newPeriod: string) => {
+  const changePeriod = useCallback(async (newPeriod: PeriodType) => {
     await updateFilters({ period: newPeriod });
   }, [updateFilters]);
 

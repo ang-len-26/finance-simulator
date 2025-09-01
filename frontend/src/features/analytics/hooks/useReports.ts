@@ -1,12 +1,12 @@
 import { useState, useCallback, useMemo } from 'react';
-import { analyticsApi } from '../services/analyticsApi';
+import analyticsApi from '../services/analyticsApi';
 import { 
   FinancialMetric, 
   ChartData, 
   AnalyticsFilters,
-  CategoryTrendData,
-  FinancialRatiosData,
-  AnalyticsPeriod
+  CategorySummary,
+  FinancialRatios,
+  PeriodType
 } from '../types/analytics.types';
 import { useApi } from '@/hooks/useApi';
 
@@ -17,6 +17,17 @@ interface ReportData {
   chart_data: ChartData;
   summary: Record<string, any>;
   metadata?: Record<string, any>;
+}
+
+interface CategoryTrendData {
+  category_name: string;
+  data: Array<{
+    period: string;
+    amount: number;
+    change_percentage?: number;
+  }>;
+  trend: 'up' | 'down' | 'stable';
+  total_change: number;
 }
 
 interface UseReportsState {
@@ -30,7 +41,7 @@ interface UseReportsState {
   financialMetrics: FinancialMetric[];
   
   // Ratios financieros
-  financialRatios: FinancialRatiosData | null;
+  financialRatios: FinancialRatios | null;
   
   // Estados de carga por reporte
   loading: {
@@ -86,7 +97,7 @@ export const useReports = (options: UseReportsOptions = {}) => {
   const [error, setError] = useState<string | null>(null);
 
   // Hook genérico para API calls
-  const { loading: apiLoading, error: apiError } = useApi();
+  const { loading: apiLoading, error: apiError } = useApi(async () => {});
 
   // =====================================================
   // UTILIDADES DE CACHE
@@ -150,13 +161,13 @@ export const useReports = (options: UseReportsOptions = {}) => {
     }));
 
     try {
-      const data = await analyticsApi.getIncomeVsExpenses(filters);
+      const data = await analyticsApi.getIncomeVsExpenses();
       
       const reportData: ReportData = {
         chart_data: data.chart_data,
-        summary: data.summary,
+        summary: data.summary || {},
         metadata: {
-          net_balance_data: data.net_balance_data,
+          net_balance_data: data.net_balance_data || null,
           period_type: 'monthly'
         }
       };
@@ -205,7 +216,7 @@ export const useReports = (options: UseReportsOptions = {}) => {
       
       const reportData: ReportData = {
         chart_data: data.chart_data,
-        summary: data.summary
+        summary: data.summary || {}
       };
 
       setState(prev => ({
@@ -252,7 +263,7 @@ export const useReports = (options: UseReportsOptions = {}) => {
       
       const reportData: ReportData = {
         chart_data: data.chart_data,
-        summary: data.summary
+        summary: data.summary || {}
       };
 
       setState(prev => ({
@@ -297,17 +308,25 @@ export const useReports = (options: UseReportsOptions = {}) => {
     try {
       const data = await analyticsApi.getCategoryTrends(filters);
       
+      // Transformar datos del API al formato esperado
+      const trendsData: CategoryTrendData[] = data.trends?.map((trend: any) => ({
+        category_name: trend.category_name || trend.name || 'Sin categoría',
+        data: trend.data || [],
+        trend: trend.trend || 'stable',
+        total_change: trend.total_change || 0
+      })) || [];
+      
       setState(prev => ({
         ...prev,
-        categoryTrends: data.trends,
+        categoryTrends: trendsData,
         currentFilters: filters,
         loading: { ...prev.loading, categoryTrends: false }
       }));
 
-      saveToCache(cacheKey, data.trends);
+      saveToCache(cacheKey, trendsData);
       setError(null);
       
-      return data.trends;
+      return trendsData;
     } catch (err: any) {
       console.error('Error loading category trends:', err);
       setError(err.message || 'Error al cargar tendencias de categorías');
@@ -323,10 +342,10 @@ export const useReports = (options: UseReportsOptions = {}) => {
    * Cargar métricas financieras precalculadas
    */
   const loadFinancialMetrics = useCallback(async (filters: {
-    period_type?: string;
+    period_type?: PeriodType;
     limit?: number;
   } = {}) => {
-    const cacheKey = getCacheKey('financial_metrics', filters);
+    const cacheKey = getCacheKey('financial_metrics', filters as AnalyticsFilters);
     const cached = getFromCache(cacheKey);
     
     if (cached) {
@@ -383,17 +402,26 @@ export const useReports = (options: UseReportsOptions = {}) => {
     try {
       const data = await analyticsApi.getFinancialRatios(filters);
       
+      // Extraer solo los ratios del response
+      const ratios: FinancialRatios = {
+        savings_rate: data.savings_rate,
+        expense_ratio: data.expense_ratio,
+        debt_to_income: data.debt_to_income,
+        liquidity_ratio: data.liquidity_ratio,
+        net_worth_growth: data.net_worth_growth
+      };
+      
       setState(prev => ({
         ...prev,
-        financialRatios: data,
+        financialRatios: ratios,
         currentFilters: filters,
         loading: { ...prev.loading, financialRatios: false }
       }));
 
-      saveToCache(cacheKey, data);
+      saveToCache(cacheKey, ratios);
       setError(null);
       
-      return data;
+      return ratios;
     } catch (err: any) {
       console.error('Error loading financial ratios:', err);
       setError(err.message || 'Error al cargar ratios financieros');

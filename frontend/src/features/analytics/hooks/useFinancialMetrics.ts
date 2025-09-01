@@ -1,11 +1,11 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { analyticsApi } from '../services/analyticsApi';
+import analyticsApi from '../services/analyticsApi';
 import { 
   FinancialMetric, 
-  FinancialRatiosData,
+  FinancialRatios,
   AnalyticsFilters,
   MetricsComparison,
-  AnalyticsPeriod
+  PeriodType
 } from '../types/analytics.types';
 import { useApi } from '@/hooks/useApi';
 
@@ -42,7 +42,7 @@ interface UseFinancialMetricsState {
   metricsHistory: FinancialMetric[];
   
   // Ratios financieros
-  ratios: FinancialRatiosData | null;
+  ratios: FinancialRatios | null;
   
   // Comparativas y tendencias
   comparison: MetricsComparison | null;
@@ -56,7 +56,7 @@ interface UseFinancialMetricsState {
   financialHealth: FinancialHealth | null;
   
   // Período actual
-  currentPeriod: AnalyticsPeriod | null;
+  currentPeriod: FinancialMetric | null;
   
   // Estados de carga
   loading: {
@@ -67,12 +67,12 @@ interface UseFinancialMetricsState {
   };
   
   // Configuración
-  periodType: string;
+  periodType: PeriodType;
   autoUpdate: boolean;
 }
 
 interface UseFinancialMetricsOptions {
-  periodType?: 'monthly' | 'quarterly' | 'yearly';
+  periodType?: PeriodType;
   autoUpdate?: boolean;
   updateInterval?: number;
   includeProjections?: boolean;
@@ -112,9 +112,270 @@ export const useFinancialMetrics = (options: UseFinancialMetricsOptions = {}) =>
   const [error, setError] = useState<string | null>(null);
 
   // Hook genérico para API calls
-  const { loading: apiLoading, error: apiError } = useApi();
+  const { loading: apiLoading, error: apiError } = useApi(async () => {});
 
   // =====================================================
+  // MÉTODOS DE ANÁLISIS Y COMPARACIÓN
+  // =====================================================
+
+  /**
+   * Calcular tendencias basadas en el historial
+   */
+  const calculateTrends = useCallback((): typeof state.trends => {
+    if (state.metricsHistory.length < 2) return null;
+
+    const recent = state.metricsHistory[0];
+    const previous = state.metricsHistory[1];
+
+    const calculateTrend = (current: number, prev: number) => {
+      const change = ((current - prev) / Math.abs(prev)) * 100;
+      return {
+        direction: change > 5 ? 'up' as const : change < -5 ? 'down' as const : 'stable' as const,
+        percentage: Math.abs(change)
+      };
+    };
+
+    return {
+      income: calculateTrend(parseFloat(recent.total_income), parseFloat(previous.total_income)),
+      expenses: calculateTrend(parseFloat(recent.total_expenses), parseFloat(previous.total_expenses)),
+      balance: calculateTrend(parseFloat(recent.net_balance), parseFloat(previous.net_balance))
+    };
+  }, [state.metricsHistory]);
+
+  /**
+   * Obtener comparación detallada con período anterior
+   */
+  const getDetailedComparison = useCallback((): MetricsComparison | null => {
+    if (!state.comparison) return null;
+    return state.comparison;
+  }, [state.comparison]);
+
+  // =====================================================
+  // MÉTODOS DE PROYECCIÓN (OPCIONAL)
+  // =====================================================
+
+  /**
+   * Proyectar métricas futuras basadas en tendencias
+   */
+  const projectFutureMetrics = useCallback((months: number = 3) => {
+    if (!includeProjections || !state.currentMetrics || state.metricsHistory.length < 3) {
+      return null;
+    }
+
+    try {
+      // Calcular tendencias de los últimos 3 meses
+      const recentHistory = state.metricsHistory.slice(0, 3);
+      const incomeGrowthRate = calculateGrowthRate(
+        recentHistory.map(m => parseFloat(m.total_income))
+      );
+      const expenseGrowthRate = calculateGrowthRate(
+        recentHistory.map(m => parseFloat(m.total_expenses))
+      );
+
+      // Proyectar valores futuros
+      const projections = [];
+      let currentIncome = state.currentMetrics.total_income;
+      let currentExpenses = state.currentMetrics.total_expenses;
+
+      for (let i = 1; i <= months; i++) {
+        currentIncome *= (1 + incomeGrowthRate);
+        currentExpenses *= (1 + expenseGrowthRate);
+
+        projections.push({
+          month: i,
+          projected_income: Math.round(currentIncome * 100) / 100,
+          projected_expenses: Math.round(currentExpenses * 100) / 100,
+          projected_balance: Math.round((currentIncome - currentExpenses) * 100) / 100
+        });
+      }
+
+      return projections;
+    } catch (err) {
+      console.error('Error calculating projections:', err);
+      return null;
+    }
+  }, [includeProjections, state.currentMetrics, state.metricsHistory]);
+
+  const calculateGrowthRate = (values: number[]): number => {
+    if (values.length < 2) return 0;
+    
+    const growthRates = [];
+    for (let i = 1; i < values.length; i++) {
+      if (values[i - 1] !== 0) {
+        growthRates.push((values[i] - values[i - 1]) / Math.abs(values[i - 1]));
+      }
+    }
+    
+    return growthRates.length > 0 
+      ? growthRates.reduce((sum, rate) => sum + rate, 0) / growthRates.length 
+      : 0;
+  };
+
+  // =====================================================
+  // MÉTODOS PRINCIPALES DE ACTUALIZACIÓN
+  // =====================================================
+
+  /**
+   * Cargar todos los datos de métricas
+   */
+  const loadAllMetrics = useCallback(async (filters: AnalyticsFilters = {}) => {
+    try {
+      const [currentMetrics, history, ratios] = await Promise.all([
+        loadCurrentMetrics(filters),
+        loadMetricsHistory(),
+        loadFinancialRatios(filters)
+      ]);
+
+      // Calcular tendencias después de cargar datos
+      const trends = calculateTrends();
+      
+      setState(prev => ({
+        ...prev,
+        trends
+      }));
+
+      // Calcular salud financiera
+      await calculateFinancialHealth();
+
+      return { currentMetrics, history, ratios };
+    } catch (err: any) {
+      console.error('Error loading all metrics:', err);
+      throw err;
+    }
+  }, [loadCurrentMetrics, loadMetricsHistory, loadFinancialRatios, calculateTrends, calculateFinancialHealth]);
+
+  /**
+   * Refrescar solo métricas críticas
+   */
+  const refreshCriticalMetrics = useCallback(async () => {
+    try {
+      await loadCurrentMetrics();
+      await loadFinancialRatios();
+      await calculateFinancialHealth();
+    } catch (err: any) {
+      console.error('Error refreshing critical metrics:', err);
+    }
+  }, [loadCurrentMetrics, loadFinancialRatios, calculateFinancialHealth]);
+
+  /**
+   * Cambiar período de análisis
+   */
+  const changePeriodType = useCallback(async (newPeriodType: PeriodType) => {
+    setState(prev => ({
+      ...prev,
+      periodType: newPeriodType
+    }));
+
+    // Recargar datos con nuevo período
+    await loadAllMetrics();
+  }, [loadAllMetrics]);
+
+  // =====================================================
+  // EFECTOS Y AUTO-UPDATE
+  // =====================================================
+
+  // Cargar datos iniciales
+  useEffect(() => {
+    loadAllMetrics();
+  }, []);
+
+  // Auto-update si está habilitado
+  useEffect(() => {
+    if (!autoUpdate) return;
+
+    const interval = setInterval(() => {
+      refreshCriticalMetrics();
+    }, updateInterval);
+
+    return () => clearInterval(interval);
+  }, [autoUpdate, updateInterval, refreshCriticalMetrics]);
+
+  // Actualizar tendencias cuando cambie el historial
+  useEffect(() => {
+    if (state.metricsHistory.length >= 2) {
+      const trends = calculateTrends();
+      setState(prev => ({ ...prev, trends }));
+    }
+  }, [state.metricsHistory, calculateTrends]);
+
+  // =====================================================
+  // COMPUTED VALUES
+  // =====================================================
+
+  const isLoadingAny = useMemo(() => {
+    return Object.values(state.loading).some(loading => loading);
+  }, [state.loading]);
+
+  const hasCompleteData = useMemo(() => {
+    return !!(
+      state.currentMetrics && 
+      state.ratios && 
+      state.metricsHistory.length > 0
+    );
+  }, [state]);
+
+  const healthColor = useMemo(() => {
+    if (!state.financialHealth) return 'gray';
+    
+    const colors = {
+      excellent: 'green',
+      good: 'blue', 
+      fair: 'yellow',
+      poor: 'red'
+    };
+    
+    return colors[state.financialHealth.level];
+  }, [state.financialHealth]);
+
+  // =====================================================
+  // RETURN DEL HOOK
+  // =====================================================
+
+  return {
+    // Datos principales
+    currentMetrics: state.currentMetrics,
+    previousMetrics: state.previousMetrics,
+    metricsHistory: state.metricsHistory,
+    ratios: state.ratios,
+    financialHealth: state.financialHealth,
+    trends: state.trends,
+    currentPeriod: state.currentPeriod,
+    
+    // Análisis avanzado
+    comparison: getDetailedComparison(),
+    projections: projectFutureMetrics(),
+    
+    // Estados
+    loading: state.loading,
+    isLoadingAny,
+    hasCompleteData,
+    error: error || apiError,
+    
+    // Configuración
+    periodType: state.periodType,
+    autoUpdate: state.autoUpdate,
+    
+    // Métodos de carga
+    loadCurrentMetrics,
+    loadMetricsHistory,
+    loadFinancialRatios,
+    loadAllMetrics,
+    
+    // Métodos de análisis
+    calculateFinancialHealth,
+    calculateTrends,
+    
+    // Métodos de actualización
+    refreshCriticalMetrics,
+    changePeriodType,
+    
+    // Utilidades
+    healthColor,
+    clearError: () => setError(null),
+  };
+};
+
+export default useFinancialMetrics;
   // MÉTODOS DE CARGA PRINCIPAL
   // =====================================================
 
@@ -133,15 +394,25 @@ export const useFinancialMetrics = (options: UseFinancialMetricsOptions = {}) =>
         ...filters
       });
 
+      const metricsData = {
+        total_income: parseFloat(data.metrics.total_income),
+        total_expenses: parseFloat(data.metrics.total_expenses),
+        net_balance: parseFloat(data.metrics.net_balance),
+        transaction_count: data.metrics.transaction_count,
+        income_change: data.comparison?.income_change || 0,
+        expense_change: data.comparison?.expense_change || 0,
+      };
+
       setState(prev => ({
         ...prev,
-        currentMetrics: data.metrics,
-        currentPeriod: data.period,
+        currentMetrics: metricsData,
+        currentPeriod: data.metrics,
+        comparison: data.comparison || null,
         loading: { ...prev.loading, metrics: false }
       }));
 
       setError(null);
-      return data.metrics;
+      return metricsData;
     } catch (err: any) {
       console.error('Error loading current metrics:', err);
       setError(err.message || 'Error al cargar métricas actuales');
@@ -197,10 +468,19 @@ export const useFinancialMetrics = (options: UseFinancialMetricsOptions = {}) =>
     }));
 
     try {
-      const ratios = await analyticsApi.getFinancialRatios({
+      const ratiosData = await analyticsApi.getFinancialRatios({
         period: periodType,
         ...filters
       });
+
+      // Extraer solo los ratios del response
+      const ratios: FinancialRatios = {
+        savings_rate: ratiosData.savings_rate,
+        expense_ratio: ratiosData.expense_ratio,
+        debt_to_income: ratiosData.debt_to_income,
+        liquidity_ratio: ratiosData.liquidity_ratio,
+        net_worth_growth: ratiosData.net_worth_growth
+      };
 
       setState(prev => ({
         ...prev,
@@ -342,7 +622,7 @@ export const useFinancialMetrics = (options: UseFinancialMetricsOptions = {}) =>
 
   const generateRecommendations = (
     factors: FinancialHealth['factors'], 
-    ratios: FinancialRatiosData
+    ratios: FinancialRatios
   ): string[] => {
     const recommendations: string[] = [];
 
@@ -371,283 +651,11 @@ export const useFinancialMetrics = (options: UseFinancialMetricsOptions = {}) =>
     }
 
     // Recomendaciones generales
-    if (ratios.investment_rate < 10) {
-      recommendations.push('Considera aumentar tus inversiones para hacer crecer tu patrimonio');
+    if (ratios.net_worth_growth < 0) {
+      recommendations.push('Considera estrategias para hacer crecer tu patrimonio neto');
     }
 
     return recommendations.slice(0, 3); // Máximo 3 recomendaciones
   };
 
   // =====================================================
-  // MÉTODOS DE ANÁLISIS Y COMPARACIÓN
-  // =====================================================
-
-  /**
-   * Calcular tendencias basadas en el historial
-   */
-  const calculateTrends = useCallback((): typeof state.trends => {
-    if (state.metricsHistory.length < 2) return null;
-
-    const recent = state.metricsHistory[0];
-    const previous = state.metricsHistory[1];
-
-    const calculateTrend = (current: number, prev: number) => {
-      const change = ((current - prev) / Math.abs(prev)) * 100;
-      return {
-        direction: change > 5 ? 'up' as const : change < -5 ? 'down' as const : 'stable' as const,
-        percentage: Math.abs(change)
-      };
-    };
-
-    return {
-      income: calculateTrend(parseFloat(recent.total_income), parseFloat(previous.total_income)),
-      expenses: calculateTrend(parseFloat(recent.total_expenses), parseFloat(previous.total_expenses)),
-      balance: calculateTrend(parseFloat(recent.net_balance), parseFloat(previous.net_balance))
-    };
-  }, [state.metricsHistory]);
-
-  /**
-   * Obtener comparación detallada con período anterior
-   */
-  const getDetailedComparison = useCallback((): MetricsComparison | null => {
-    if (!state.currentMetrics || state.metricsHistory.length < 2) return null;
-
-    const currentPeriod = state.metricsHistory[0];
-    const previousPeriod = state.metricsHistory[1];
-
-    return {
-      current_period: currentPeriod,
-      previous_period: previousPeriod,
-      income_change: state.currentMetrics.income_change,
-      expense_change: state.currentMetrics.expense_change,
-      balance_change: ((state.currentMetrics.net_balance - (state.previousMetrics?.net_balance || 0)) / 
-        Math.abs(state.previousMetrics?.net_balance || 1)) * 100
-    };
-  }, [state.currentMetrics, state.previousMetrics, state.metricsHistory]);
-
-  // =====================================================
-  // MÉTODOS DE PROYECCIÓN (OPCIONAL)
-  // =====================================================
-
-  /**
-   * Proyectar métricas futuras basadas en tendencias
-   */
-  const projectFutureMetrics = useCallback((months: number = 3) => {
-    if (!includeProjections || !state.currentMetrics || state.metricsHistory.length < 3) {
-      return null;
-    }
-
-    try {
-      // Calcular tendencias de los últimos 3 meses
-      const recentHistory = state.metricsHistory.slice(0, 3);
-      const incomeGrowthRate = calculateGrowthRate(
-        recentHistory.map(m => parseFloat(m.total_income))
-      );
-      const expenseGrowthRate = calculateGrowthRate(
-        recentHistory.map(m => parseFloat(m.total_expenses))
-      );
-
-      // Proyectar valores futuros
-      const projections = [];
-      let currentIncome = state.currentMetrics.total_income;
-      let currentExpenses = state.currentMetrics.total_expenses;
-
-      for (let i = 1; i <= months; i++) {
-        currentIncome *= (1 + incomeGrowthRate);
-        currentExpenses *= (1 + expenseGrowthRate);
-
-        projections.push({
-          month: i,
-          projected_income: Math.round(currentIncome * 100) / 100,
-          projected_expenses: Math.round(currentExpenses * 100) / 100,
-          projected_balance: Math.round((currentIncome - currentExpenses) * 100) / 100
-        });
-      }
-
-      return projections;
-    } catch (err) {
-      console.error('Error calculating projections:', err);
-      return null;
-    }
-  }, [includeProjections, state.currentMetrics, state.metricsHistory]);
-
-  const calculateGrowthRate = (values: number[]): number => {
-    if (values.length < 2) return 0;
-    
-    const growthRates = [];
-    for (let i = 1; i < values.length; i++) {
-      if (values[i - 1] !== 0) {
-        growthRates.push((values[i] - values[i - 1]) / Math.abs(values[i - 1]));
-      }
-    }
-    
-    return growthRates.length > 0 
-      ? growthRates.reduce((sum, rate) => sum + rate, 0) / growthRates.length 
-      : 0;
-  };
-
-  // =====================================================
-  // MÉTODOS PRINCIPALES DE ACTUALIZACIÓN
-  // =====================================================
-
-  /**
-   * Cargar todos los datos de métricas
-   */
-  const loadAllMetrics = useCallback(async (filters: AnalyticsFilters = {}) => {
-    try {
-      const [currentMetrics, history, ratios] = await Promise.all([
-        loadCurrentMetrics(filters),
-        loadMetricsHistory(),
-        loadFinancialRatios(filters)
-      ]);
-
-      // Calcular tendencias después de cargar datos
-      const trends = calculateTrends();
-      
-      setState(prev => ({
-        ...prev,
-        trends
-      }));
-
-      // Calcular salud financiera
-      await calculateFinancialHealth();
-
-      return { currentMetrics, history, ratios };
-    } catch (err: any) {
-      console.error('Error loading all metrics:', err);
-      throw err;
-    }
-  }, [loadCurrentMetrics, loadMetricsHistory, loadFinancialRatios, calculateTrends, calculateFinancialHealth]);
-
-  /**
-   * Refrescar solo métricas críticas
-   */
-  const refreshCriticalMetrics = useCallback(async () => {
-    try {
-      await loadCurrentMetrics();
-      await loadFinancialRatios();
-      await calculateFinancialHealth();
-    } catch (err: any) {
-      console.error('Error refreshing critical metrics:', err);
-    }
-  }, [loadCurrentMetrics, loadFinancialRatios, calculateFinancialHealth]);
-
-  /**
-   * Cambiar período de análisis
-   */
-  const changePeriodType = useCallback(async (newPeriodType: typeof periodType) => {
-    setState(prev => ({
-      ...prev,
-      periodType: newPeriodType
-    }));
-
-    // Recargar datos con nuevo período
-    await loadAllMetrics();
-  }, [loadAllMetrics]);
-
-  // =====================================================
-  // EFECTOS Y AUTO-UPDATE
-  // =====================================================
-
-  // Cargar datos iniciales
-  useEffect(() => {
-    loadAllMetrics();
-  }, []);
-
-  // Auto-update si está habilitado
-  useEffect(() => {
-    if (!autoUpdate) return;
-
-    const interval = setInterval(() => {
-      refreshCriticalMetrics();
-    }, updateInterval);
-
-    return () => clearInterval(interval);
-  }, [autoUpdate, updateInterval, refreshCriticalMetrics]);
-
-  // Actualizar tendencias cuando cambie el historial
-  useEffect(() => {
-    if (state.metricsHistory.length >= 2) {
-      const trends = calculateTrends();
-      setState(prev => ({ ...prev, trends }));
-    }
-  }, [state.metricsHistory, calculateTrends]);
-
-  // =====================================================
-  // COMPUTED VALUES
-  // =====================================================
-
-  const isLoadingAny = useMemo(() => {
-    return Object.values(state.loading).some(loading => loading);
-  }, [state.loading]);
-
-  const hasCompleteData = useMemo(() => {
-    return !!(
-      state.currentMetrics && 
-      state.ratios && 
-      state.metricsHistory.length > 0
-    );
-  }, [state]);
-
-  const healthColor = useMemo(() => {
-    if (!state.financialHealth) return 'gray';
-    
-    const colors = {
-      excellent: 'green',
-      good: 'blue', 
-      fair: 'yellow',
-      poor: 'red'
-    };
-    
-    return colors[state.financialHealth.level];
-  }, [state.financialHealth]);
-
-  // =====================================================
-  // RETURN DEL HOOK
-  // =====================================================
-
-  return {
-    // Datos principales
-    currentMetrics: state.currentMetrics,
-    previousMetrics: state.previousMetrics,
-    metricsHistory: state.metricsHistory,
-    ratios: state.ratios,
-    financialHealth: state.financialHealth,
-    trends: state.trends,
-    currentPeriod: state.currentPeriod,
-    
-    // Análisis avanzado
-    comparison: getDetailedComparison(),
-    projections: projectFutureMetrics(),
-    
-    // Estados
-    loading: state.loading,
-    isLoadingAny,
-    hasCompleteData,
-    error: error || apiError,
-    
-    // Configuración
-    periodType: state.periodType,
-    autoUpdate: state.autoUpdate,
-    
-    // Métodos de carga
-    loadCurrentMetrics,
-    loadMetricsHistory,
-    loadFinancialRatios,
-    loadAllMetrics,
-    
-    // Métodos de análisis
-    calculateFinancialHealth,
-    calculateTrends,
-    
-    // Métodos de actualización
-    refreshCriticalMetrics,
-    changePeriodType,
-    
-    // Utilidades
-    healthColor,
-    clearError: () => setError(null),
-  };
-};
-
-export default useFinancialMetrics;
