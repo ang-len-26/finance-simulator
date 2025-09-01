@@ -12,14 +12,6 @@ import { useApi } from '@/hooks/useApi';
 // =====================================================
 // TIPOS ESPECÍFICOS PARA MÉTRICAS
 // =====================================================
-interface MetricsSummary {
-  total_income: number;
-  total_expenses: number;
-  net_balance: number;
-  transaction_count: number;
-  income_change: number;
-  expense_change: number;
-}
 
 interface FinancialHealth {
   score: number; // 0-100
@@ -35,9 +27,9 @@ interface FinancialHealth {
 
 interface UseFinancialMetricsState {
   // Métricas actuales
-  currentMetrics: MetricsSummary | null;
-  previousMetrics: MetricsSummary | null;
-  
+  currentMetrics: MetricsComparison | null;
+  previousMetrics: MetricsComparison | null;
+
   // Histórico de métricas
   metricsHistory: FinancialMetric[];
   
@@ -121,7 +113,7 @@ export const useFinancialMetrics = (options: UseFinancialMetricsOptions = {}) =>
   /**
    * Cargar métricas actuales del período
    */
-  const loadCurrentMetrics = useCallback(async (filters: AnalyticsFilters = {}) => {
+  const loadCurrentMetrics = useCallback(async (filters: AnalyticsFilters) => {
     setState(prev => ({
       ...prev,
       loading: { ...prev.loading, metrics: true }
@@ -130,13 +122,14 @@ export const useFinancialMetrics = (options: UseFinancialMetricsOptions = {}) =>
     try {
       const data = await analyticsApi.getMetrics({
         period: periodType,
-        ...filters
+        start_date: filters.start_date,
+        end_date: filters.end_date
       });
 
       setState(prev => ({
         ...prev,
-        currentMetrics: data.,
-        currentPeriod: data.period,
+        currentMetrics: data.comparison,
+        previousMetrics: data.comparison,
         loading: { ...prev.loading, metrics: false }
       }));
 
@@ -415,8 +408,11 @@ export const useFinancialMetrics = (options: UseFinancialMetricsOptions = {}) =>
       previous_period: previousPeriod,
       income_change: state.currentMetrics.income_change,
       expense_change: state.currentMetrics.expense_change,
-      balance_change: ((state.currentMetrics.net_balance - (state.previousMetrics?.net_balance || 0)) / 
-        Math.abs(state.previousMetrics?.net_balance || 1)) * 100
+      balance_change: (
+        (parseFloat(state.currentMetrics.current_period.net_balance) - 
+         parseFloat(state.previousMetrics?.current_period.net_balance ?? '0')) /
+        Math.abs(parseFloat(state.previousMetrics?.current_period.net_balance ?? '1'))
+      ) * 100
     };
   }, [state.currentMetrics, state.previousMetrics, state.metricsHistory]);
 
@@ -444,8 +440,8 @@ export const useFinancialMetrics = (options: UseFinancialMetricsOptions = {}) =>
 
       // Proyectar valores futuros
       const projections = [];
-      let currentIncome = state.currentMetrics.total_income;
-      let currentExpenses = state.currentMetrics.total_expenses;
+      let currentIncome = Number(state.currentMetrics.current_period.total_income);
+      let currentExpenses = Number(state.currentMetrics.current_period.total_expenses);
 
       for (let i = 1; i <= months; i++) {
         currentIncome *= (1 + incomeGrowthRate);
@@ -519,7 +515,6 @@ export const useFinancialMetrics = (options: UseFinancialMetricsOptions = {}) =>
    */
   const refreshCriticalMetrics = useCallback(async () => {
     try {
-      await loadCurrentMetrics();
       await loadFinancialRatios();
       await calculateFinancialHealth();
     } catch (err: any) {
